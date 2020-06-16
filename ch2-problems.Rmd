@@ -1,0 +1,106 @@
+## Chapter 2 problems
+
+> 2E1. Which of the expressions below correspond to the statement:the probability of rain on Monday?
+
+1. Pr(rain)
+2. **Pr(rain|Monday)**
+3. Pr(Monday|rain)
+4. Pr(rain,Monday)/Pr(Monday)
+
+
+> 2E2. Which of the following statements corresponds to the expression: Pr(Monday|rain)?
+
+1. The probability of rain on Monday.
+2. The probability of rain, given that it is Monday.
+3. **The probability that it is Monday, given that it is raining.**
+4. The probability that it is Monday and that it is raining.
+
+> 2E3. Which of the expressions below correspond to the statement: the probability that it is Monday, given that it is raining?
+
+1. **Pr(Monday|rain)**
+2. Pr(rain|Monday)
+3. Pr(rain|Monday)Pr(Monday)
+4. Pr(rain|Monday)Pr(Monday)/Pr(rain) 
+5. Pr(Monday|rain)Pr(rain)/Pr(Monday)
+
+> 2E4. The Bayesian statistician Bruno de Finetti (1906–1985) began his book on probability theory with the declaration: “PROBABILITY DOES NOT EXIST.” The capitals appeared in the original, so I imagine de Finetti wanted us to shout this statement. What he meant is that probability is a device for describing uncertainty from the perspective of an observer with limited knowledge; it has no objective reality. Discuss the globe tossing example from the chapter, in light of this statement. What does it mean to say “the probability of water is 0.7”?
+
+Based on the tosses that we've performed, on the globe we hold, we can expect 70% of future tosses to also land on water. The source of the uncertainty and limited knowledge is that the point we're landing on is random.
+
+
+2M1. Recall the globe tossing model from the chapter. Compute and plot the grid approximate posterior distribution for each of the following sets of observations. In each case, assume a uniform prior for p.
+
+```{r}
+globe_grid <- function(trial_list, grid_size){
+  # define grid
+  p_grid <- seq( from=0 , to=1 , length.out=grid_size ) 
+  # define prior
+  prior <- rep( 1 , grid_size )
+  # compute likelihood at each value in grid 
+  likelihood <- dbinom( sum(trial_list) , size=length(trial_list) , prob=p_grid )
+  # compute product of likelihood and prior 
+  unstd.posterior <- likelihood * prior
+  # standardize the posterior, so it sums to 1 
+  posterior <- unstd.posterior / sum(unstd.posterior)
+  plot(p_grid , posterior , type="b" , 
+       xlab="probability of water" , ylab="posterior probability")
+  mtext( sprintf("%i points", grid_size ))  
+}
+```
+
+1. W, W, W
+```{r, fig.align='center'}
+globe_grid(c(1,1,1),100)
+```
+2. W, W, W, L
+```{r, fig.align='center'}
+globe_grid(c(1,1,1,0),100)
+```
+
+3. L,W,W,L,W,W,W
+```{r, fig.align='center'}
+globe_grid(c(0,1,1,0,1,1,1),100)
+```
+
+2M2. Now assume a prior for p that is equal to zero when $p < 0.5$ and is a positive constant when $p \geq 0.5$. Again compute and plot the grid approximate posterior distribution for each of the sets of observations in the problem just above.
+
+```{r, include=FALSE}
+globe_grid_const <- function(trial_list, grid_size, prior_const){
+  # define grid
+  p_grid <- seq( from=0 , to=1 , length.out=grid_size ) 
+  # define prior
+  prior <- (p_grid >= 0.5) * prior_const
+  # compute likelihood at each value in grid 
+  likelihood <- dbinom( sum(trial_list) , size=length(trial_list) , prob=p_grid )
+  # compute product of likelihood and prior 
+  unstd.posterior <- likelihood * prior
+  # standardize the posterior, so it sums to 1 
+  posterior <- unstd.posterior / sum(unstd.posterior)
+  plot(p_grid , posterior , type="b" , 
+       xlab="probability of water" , ylab="posterior probability")
+  mtext( sprintf("%i points", grid_size ))  
+}
+```
+Change function prior definition to:
+```
+# define prior
+prior <- (p_grid >= 0.5) * prior_const
+```  
+1. W, W, W
+```{r, fig.align='center'}
+globe_grid_const(c(1,1,1),100, 1.0)
+```
+
+2. W, W, W, L
+```{r, fig.align='center'}
+globe_grid_const(c(1,1,1,0),100, 1.0)
+```
+
+
+3. L,W,W,L,W,W,W
+```{r, fig.align='center'}
+globe_grid_const(c(0,1,1,0,1,1,1),100,1)
+```
+
+
+

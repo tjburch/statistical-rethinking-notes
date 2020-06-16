@@ -1,0 +1,166 @@
+# Chapter 2 - Small Worlds and Large Worlds
+
+Christopher Columbus thought the world was 10,000 km smaller than it is, his prediction made him think he could have enough supplies to circle it - contrast between model and reality.
+
+Small world - self-contained logical world of model
+
+Large World - larger context where model is deployed
+
+## 2.1 - The Garden of Forking Data
+
+Bayesian inference is really just counting and comparing possibilities. Cannot guarantee a correct answer, but can guarantee the best possible answer given information provided.
+
+Use example of blue/white marbles out of bag, examine each path of pulls to exclude different "paths" through the data. Introduce a "prior," if all routes are equally likely, can base prior on the number of counts to an outcome. Update prior after a pull, or when new information is added (e.g. the company says blue is rare). The example outlines the following terms:
+
+1. Conjectured proportion of marbles ($p$ in example) is a "parameter" value
+2. Number of ways a value can produce data is a "likelihood" - derived by enumerating all data sequences that could have happened and eliminate those inconsistent with data
+3. Prior plausibility of $p$ is the "prior probability"
+4. Updated plausibility of $p$ is the "posterior probability"
+
+## 2.2 - Building a model
+
+Design loop with 3 steps:
+
+1. Data story: motivate model by narrating how the data might arise
+2. Update: educate model by feeding it data
+3. Evaluate: All models require supervision, possibly leading to model revision
+
+
+Example in chapter - calculate the amount of water on earth by throwing globe up in the air, see if right thumb is on water or land.
+
+#### Data Story
+
+May be _descriptive_, specifying associations to predict outcomes given observations; may be _causal_, a theory of how some events produce others. Generally causal stories are easily descriptive, descriptive stories may be hard to be causal. Can motivate by explaining how each piece of data is born. The value of the story is to more strongly define hypotheses and resolve ambiguities.
+
+Example: true proportion of water is $p$, single toss has $p$ chance of producing water $W$ and $1-p$ of land $L$, each toss is independent.
+
+#### Bayesian Updating
+
+Model begins with one set of plausibilities assigned to each possibility. As data is collected, posteriors are produced.
+
+Example: Give uniform prior. First case lands on water, $p=0$ is excluded, since there is no longer a possibility of no water. Continue tossing and distribution shifts and closes more and more.
+
+One benefit of Bayesian approach is that estimates are valid for any sample size. Of course better with more data.
+
+#### Evaluate
+
+Because of differences between the model and real world, no guarantee of large world performance. Keep in mind two principles. Model's certainty is no guarantee the model is good - this is telling you that, given this model, plausible values are in some range. Second, it's important to supervise and critique the work - in the example, order of tosses shouldn't change final curve, but may indirectly affect it because data depends on order, so check on data it does not know about.
+
+
+## 2.3 - Components of the Model
+
+#### Variables
+
+Symbols that can take different values - for globe example: target $p$ (proportion of water) cannot be observed. Unobserved are called "parameters." Other variables are count of water $W$ and count of land $L$, these are observed.
+
+#### Definitions 
+
+In defining, we build a model relating variables to one another. For each value of unobserved, need to define the number of ways/probability that the values of each observed could arise. For each unobserved also need a prior.
+
+Using example:
+
+**Observed Variables** - For specific $p$, need to define how plausible combinations of $W$ and $L$ would be, using a mathematical function called a likelihood. In this case, if tosses are independent and probability are the same, we use binomial distribution.
+
+$$
+ \text{Pr}(W,L|p) = \frac{(W+L)!}{W!L!}p^W(1-p)^L
+$$
+
+In R:
+```{r binomial}
+  dbinom( 6 , size=9 , prob=0.5)
+```
+
+This gives the relative number of ways to get 6 water results for $p=0.5$ after 9 total tosses ($N=W+L=9$).
+
+**Unobserved Variables** - Distributions for observed variables typically have own variables; $p$ not observed, so a parameter. Many common data questions are answered directly by parameters, e.g. average difference between groups, association strength, covariate dependence, variation. For every parameter, you must define a prior.
+
+Some schools of thought that emphasize choosing priors on personal belief, known as "subjective Bayesian." If you don't have a strong argument for any prior, try different ones. 
+
+#### Model is born
+
+Can summarize as the following:
+
+$$
+  W \sim \text{Binomial}(N,p)\\
+  p \sim \text{Uniform}(0,1)
+$$
+
+Telling us $W$ is binomial, and $p$ is flat over the range 0 to 1.
+
+## 2.4 - Making the Model Go
+
+Once you have named all the variables, definitions, update prior to posterior - the relative plausibility of parameter values conditional on fdata and model, for our example $\text{Pr}(p|W,L)$.
+
+#### Bayes Theorem 
+
+Mathematical definition of posterior arises from Bayes. Joint probability $\text{Pr}(W,L,p) =\text{Pr}(W,L|p)\text{Pr}(p)$. The right side can also be reversed $\text{Pr}(p|W,L)\text{Pr}(W,L)$, which can be solved to 
+
+$$
+  \text{Pr}(p|W,L) = \frac{\text{Pr}(W,L|p)\text{Pr}(p)}{\text{Pr}(W,L)}
+$$
+This is Bayes theorem but can really just be said
+
+$$
+  \text{Posterior} = \frac{\text{Probability of data} \times \text{Prior}}{\text{Average probability of the data}}
+$$
+
+Denominator is averaged over the prior - meant to standardize the posterior to make teh sum one.
+
+Three different numerical techniques for computing posterior: grid approximation, quadratic approximation, MCMC.
+
+**Grid Approximation** - Consider a finite number of values, compute posterior by multiplying prior by likelihood, repeate until getting an apprximate picture of the posterior. Mostly a pedagogical tool, since not typically practical. 
+
+```{r, fig.align='center'}
+  # define grid
+  p_grid <- seq( from=0 , to=1 , length.out=20 )
+  # define prior
+  prior <- rep( 1 , 20 )
+  # compute likelihood at each value in grid 
+  likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+  # compute product of likelihood and prior 
+  unstd.posterior <- likelihood * prior
+  # standardize the posterior, so it sums to 1 
+  posterior <- unstd.posterior / sum(unstd.posterior)
+  plot(p_grid , posterior , type="b" , 
+       xlab="probability of water" , ylab="posterior probability")
+  mtext( "20 points" )
+```
+
+
+**Quadratic Approximation** - More parameters make grid apprixmations tough ($N^p$ for $p$ parameters and $N$ data points). Use quadratic approximation when the region near the peak of the posterior will be gaussian in shape, easy because it can be described by just mean and variance. 
+
+1. Find posterior mode
+
+2. Estimate curvature, either analytically or computationally.
+
+For this book use ```quap``` from rethinking programming package
+
+```{R, warning=FALSE,message=FALSE, fig.align='center'}
+  library(rethinking)
+  globe.qa <- quap( 
+    alist(
+      W ~ dbinom (W+L, p), # Binomial
+      p ~ dunif(0,1) # Uniform
+    ), data = list(W=6, L=3)
+  )
+  precis(globe.qa)
+```
+
+The quadratic approximation is often equivalent to a Maximum Likelihood Estimate and its standard error.
+
+note - quadratic is solved by computing the Hessian, a square matrix of second derivatives of the log of posterior probability wrt parameters. Derivatives suffficient to describe a gaussian. Std is typically computed from Hessian, which can occassionally cause problems in computation.
+
+**Markov chain Monte Carlo (MCMC)** - Many models, like multilevel/mixed-effects don't work for grid approximation (many parameters) or quadratic (non-gaussian posterior). Function to maximize isn't known, computed in pieces via MCMC. Rather than computing or approximating posterior, MCMC draws samples, a collection of parameter values.
+
+<center>
+![MCMC with 1000 samples](ch2-plots/mcmc.png)
+</center>
+
+## 2.5 - Summary
+
+Looked at conceptual ideas in Bayesian data analysis. Models are composite of variables and distributional definitions, fit to data using numerical techniques
+
+
+
+
+
