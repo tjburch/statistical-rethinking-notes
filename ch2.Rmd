@@ -104,11 +104,11 @@ $$
   \text{Posterior} = \frac{\text{Probability of data} \times \text{Prior}}{\text{Average probability of the data}}
 $$
 
-Denominator is averaged over the prior - meant to standardize the posterior to make teh sum one.
+Denominator is averaged over the prior - meant to standardize the posterior to make the sum one.
 
 Three different numerical techniques for computing posterior: grid approximation, quadratic approximation, MCMC.
 
-**Grid Approximation** - Consider a finite number of values, compute posterior by multiplying prior by likelihood, repeate until getting an apprximate picture of the posterior. Mostly a pedagogical tool, since not typically practical. 
+**Grid Approximation** - Consider a finite number of values, compute posterior by multiplying prior by likelihood, repeat until getting an approximate picture of the posterior. Mostly a pedagogical tool, since not typically practical. 
 
 ```{r, fig.align='center'}
   # define grid
@@ -127,7 +127,7 @@ Three different numerical techniques for computing posterior: grid approximation
 ```
 
 
-**Quadratic Approximation** - More parameters make grid apprixmations tough ($N^p$ for $p$ parameters and $N$ data points). Use quadratic approximation when the region near the peak of the posterior will be gaussian in shape, easy because it can be described by just mean and variance. 
+**Quadratic Approximation** - More parameters make grid approximations tough ($N^p$ for $p$ parameters and $N$ data points). Use quadratic approximation when the region near the peak of the posterior will be Gaussian in shape, easy because it can be described by just mean and variance. 
 
 1. Find posterior mode
 
@@ -148,9 +148,9 @@ For this book use ```quap``` from rethinking programming package
 
 The quadratic approximation is often equivalent to a Maximum Likelihood Estimate and its standard error.
 
-note - quadratic is solved by computing the Hessian, a square matrix of second derivatives of the log of posterior probability wrt parameters. Derivatives suffficient to describe a gaussian. Std is typically computed from Hessian, which can occassionally cause problems in computation.
+note - quadratic is solved by computing the Hessian, a square matrix of second derivatives of the log of posterior probability wrt parameters. Derivatives sufficient to describe a Gaussian. Std is typically computed from Hessian, which can occasionally cause problems in computation.
 
-**Markov chain Monte Carlo (MCMC)** - Many models, like multilevel/mixed-effects don't work for grid approximation (many parameters) or quadratic (non-gaussian posterior). Function to maximize isn't known, computed in pieces via MCMC. Rather than computing or approximating posterior, MCMC draws samples, a collection of parameter values.
+**Markov chain Monte Carlo (MCMC)** - Many models, like multilevel/mixed-effects don't work for grid approximation (many parameters) or quadratic (non-Gaussian posterior). Function to maximize isn't known, computed in pieces via MCMC. Rather than computing or approximating posterior, MCMC draws samples, a collection of parameter values.
 
 <center>
 ![MCMC with 1000 samples](ch2-plots/mcmc.png)
