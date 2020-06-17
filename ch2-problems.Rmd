@@ -1,21 +1,26 @@
 ## Chapter 2 problems
 
-> 2E1. Which of the expressions below correspond to the statement:the probability of rain on Monday?
+__2E1.__
+
+> Which of the expressions below correspond to the statement:the probability of rain on Monday?
 
 1. Pr(rain)
 2. **Pr(rain|Monday)**
 3. Pr(Monday|rain)
 4. Pr(rain,Monday)/Pr(Monday)
 
+__2E2.__
 
-> 2E2. Which of the following statements corresponds to the expression: Pr(Monday|rain)?
+> Which of the following statements corresponds to the expression: Pr(Monday|rain)?
 
 1. The probability of rain on Monday.
 2. The probability of rain, given that it is Monday.
 3. **The probability that it is Monday, given that it is raining.**
 4. The probability that it is Monday and that it is raining.
 
-> 2E3. Which of the expressions below correspond to the statement: the probability that it is Monday, given that it is raining?
+__2E3.__
+
+> Which of the expressions below correspond to the statement: the probability that it is Monday, given that it is raining?
 
 1. **Pr(Monday|rain)**
 2. Pr(rain|Monday)
@@ -23,12 +28,15 @@
 4. Pr(rain|Monday)Pr(Monday)/Pr(rain) 
 5. Pr(Monday|rain)Pr(rain)/Pr(Monday)
 
-> 2E4. The Bayesian statistician Bruno de Finetti (1906–1985) began his book on probability theory with the declaration: “PROBABILITY DOES NOT EXIST.” The capitals appeared in the original, so I imagine de Finetti wanted us to shout this statement. What he meant is that probability is a device for describing uncertainty from the perspective of an observer with limited knowledge; it has no objective reality. Discuss the globe tossing example from the chapter, in light of this statement. What does it mean to say “the probability of water is 0.7”?
+__2E4.__
+
+> The Bayesian statistician Bruno de Finetti (1906–1985) began his book on probability theory with the declaration: “PROBABILITY DOES NOT EXIST.” The capitals appeared in the original, so I imagine de Finetti wanted us to shout this statement. What he meant is that probability is a device for describing uncertainty from the perspective of an observer with limited knowledge; it has no objective reality. Discuss the globe tossing example from the chapter, in light of this statement. What does it mean to say “the probability of water is 0.7”?
 
 Based on the tosses that we've performed, on the globe we hold, we can expect 70% of future tosses to also land on water. The source of the uncertainty and limited knowledge is that the point we're landing on is random.
 
+__2M1.__
 
-2M1. Recall the globe tossing model from the chapter. Compute and plot the grid approximate posterior distribution for each of the following sets of observations. In each case, assume a uniform prior for p.
+> Recall the globe tossing model from the chapter. Compute and plot the grid approximate posterior distribution for each of the following sets of observations. In each case, assume a uniform prior for p.
 
 ```{r}
 globe_grid <- function(trial_list, grid_size){
@@ -62,7 +70,9 @@ globe_grid(c(1,1,1,0),100)
 globe_grid(c(0,1,1,0,1,1,1),100)
 ```
 
-2M2. Now assume a prior for p that is equal to zero when $p < 0.5$ and is a positive constant when $p \geq 0.5$. Again compute and plot the grid approximate posterior distribution for each of the sets of observations in the problem just above.
+__2M2.__
+
+> Now assume a prior for p that is equal to zero when $p < 0.5$ and is a positive constant when $p \geq 0.5$. Again compute and plot the grid approximate posterior distribution for each of the sets of observations in the problem just above.
 
 ```{r, include=FALSE}
 globe_grid_const <- function(trial_list, grid_size, prior_const){
@@ -102,5 +112,170 @@ globe_grid_const(c(1,1,1,0),100, 1.0)
 globe_grid_const(c(0,1,1,0,1,1,1),100,1)
 ```
 
+__2M3.__
 
+> Suppose there are two globes, one for Earth and one for Mars. The Earth globe is 70% covered in water. The Mars globe is 100% land. Further suppose that one of these globes—you don’t know which—was tossed in the air and produced a “land” observation. Assume that each globe was equally likely to be tossed. Show that the posterior probability that the globe was the Earth, conditional on seeing “land” (Pr(Earth|land)), is 0.23.
 
+First find total probability of land:
+$$
+    \text{Pr}(\text{land}) = \text{Pr}(\text{land}|\text{Earth})\text{Pr(Earth)} + \text{Pr}(\text{land|Mars})\text{Pr}(\text{Mars})\\
+                           = (0.3)(0.5) + (1.0)(0.5)\\
+                           = 0.65
+$$
+Now solve for probability of Earth, given we have land:
+$$
+  \text{Pr}(\text{Earth}|\text{land}) =  \frac{\text{Pr}(\text{land}|\text{Earth})\text{Pr}(\text{Earth})}{\text{Pr}(\text{land})}\\
+                                      = \frac{(0.3)(0.5)}{0.65}\\
+                                      \approx 0.23
+$$
+
+__2M4.__
+
+> Suppose you have a deck with only three cards. Each card has two sides, and each side is either black or white. One card has two black sides. The second card has one black and one white side. The third card has two white sides. Now suppose all three cards are placed in a bag and shuffled. Someone reaches into the bag and pulls out a card and places it flat on a table. A black side is shown facing up, but you don’t know the color of the side facing down. Show that the probability that the other side is also black is 2/3. Use the counting method (Section 2 of the chapter) to approach this problem. This means counting up the ways that each card could produce the observed data (a black side facing up on the table).
+
+Enumerating all possible scenarios (b=black, w=white):
+
+1. w up; w down (w/w)
+2. w up; w down (w/w)
+3. w up; b down (w/b)
+4. b up; w down (w/b)
+5. b up; b down (b/b)
+6. b up; b down (b/b)
+
+Observation eliminates 1-3, so 3-6 remain. 2/3 of those are b/b card, so this is our solution.
+
+__2M5.__
+
+> Now suppose there are four cards: B/B, B/W, W/W, and another B/B. Again suppose a card is drawn from the bag and a black side appears face up. Again calculate the probability that the other side is black.
+
+Add to the prior cases:
+
+7. b up; b down (new b/b)
+8. b up; b down (new b/b)
+
+Again we can eliminate 1-3 from observation. This leaves 5 cases (3-8). Of those 4 are b/b, so 4/5.
+
+__2M6.__
+
+> Imagine that black ink is heavy, and so cards with black sides are heavier than cards with white sides. As a result, it’s less likely that a card with black sides is pulled from the bag. So again assume there are three cards: B/B, B/W, and W/W. After experimenting a number of times, you conclude that for every way to pull the B/B card from the bag, there are 2 ways to pull the B/W card and 3 ways to pull the W/W card. Again suppose that a card is pulled and a black side appears face up. Show that the probability the other side is black is now 0.5. Use the counting method, as before.
+
+Same cases as before, but now amend rates
+
+| up | down | card | rate |
+|----|------|------|------|
+| w  | w    | w/w  | 3    |
+| w  | w    | w/w  | 3    |
+| w  | b    | w/b  | 2    |
+| b  | w    | w/b  | 2    |
+| b  | b    | b/b  | 1    |
+| b  | b    | b/b  | 1    |
+
+Now, we can cancel the first three cases, since we've pulled black. 2 b/b options at rate 1, 1 w/b option at rate 2. That means 2 positive chances out of 4 total rate chances, 2/4 = 0.5.
+
+__2M7.__
+
+> Assume again the original card problem, with a single card showing a black side face up.Before looking at the other side, we draw another card from the bag and lay it face up on the table. The face that is shown on the new card is white. Show that the probability that the first card, the one showing a black side, has black on its other side is now 0.75. Use the counting method, if you can. Hint: Treat this like the sequence of globe tosses, counting all the ways to see each observation, for each possible first card.
+
+Looking at scenarios that match data:
+
+1. b/b, w/b
+2. b/b (flipped), w/b
+3. b/b, w/w
+4. b/b, w/w (flipped)
+5. b/b (flipped), w/w
+6. b/b (flipped), w/w (flipped)
+7. b/w, w/w
+8. b/w, w/w (flipped)
+
+1-6 are desired, 7-8 are not; therefore 6/8 or 75%.
+
+__2H1.__
+
+> Suppose there are two species of panda bear. Both are equally common in the wild and live in the same places. They look exactly alike and eat the same food, and there is yet no genetic assay capable of telling them apart. They differ however in their family sizes. Species A gives birth to twins 10% of the time, otherwise birthing a single infant. Species B births twins 20% of the time, otherwise birthing singleton infants. Assume these numbers are known with certainty, from many years of field research.
+Now suppose you are managing a captive panda breeding program. You have a new female panda of unknown species, and she has just given birth to twins. What is the probability that her next birth will also be twins?
+
+```{r}
+# Givens
+rate_a <- .5
+rate_b <- .5
+twin_rate_a <- .1
+twin_rate_b <- .2
+# Need to solve:
+# P(twins) = P(twins|A)*P(A) + P(twins|B)P(B)
+sum_probability_twins <- rate_a * twin_rate_a + rate_b * twin_rate_b # norm factor
+
+pA_given_twins <- (twin_rate_a * rate_a) / sum_probability_twins
+pB_given_twins <- (twin_rate_b * rate_b) / sum_probability_twins
+p_twins <- twin_rate_a * pA_given_twins + twin_rate_b * pB_given_twins
+p_twins
+```
+16.7% chance
+
+__2H2.__
+
+> Recall all the facts from the problem above. Now compute the probability that the panda we have is from species A, assuming we have observed only the first birth and that it was twins.
+
+```{r}
+pA_given_twins
+```
+33% chance
+
+__2H3.__
+
+> Continuing on from the previous problem, suppose the same panda mother has a second birth and that it is not twins, but a singleton infant. Compute the posterior probability that this panda is species A.
+
+```{r}
+# Givens
+updated_rate_a <- pA_given_twins
+updated_rate_b <- pB_given_twins
+single_rate_a <- 1-twin_rate_a
+single_rate_b <- 1-twin_rate_b
+
+# Repeat calculations for new single birth
+# norm factor
+sum_probability_single <- single_rate_a * twin_rate_a +
+  single_rate_b * twin_rate_b 
+# Calculate probabilities
+pA_given_single <- (single_rate_a * twin_rate_a) / sum_probability_single
+pB_given_single <- (single_rate_b * twin_rate_b) / sum_probability_single
+pA_given_single
+```
+36% chance
+
+__2H4.__
+
+> A common boast of Bayesian statisticians is that Bayesian inference makes it easy to use all of the data, even if the data are of different types.
+So suppose now that a veterinarian comes along who has a new genetic test that she claims can identify the species of our mother panda. But the test, like all tests, is imperfect. This is the information you have about the test:
+- The probability it correctly identifies a species A panda is 0.8.
+- The probability it correctly identifies a species B panda is 0.65.
+The vet administers the test to your panda and tells you that the test is positive for species A. First ignore your previous information from the births and compute the posterior probability that your panda is species A. Then redo your calculation, now using the birth data as well.
+
+Starting with data-free solution:
+```{r}
+# Givens
+a_given_pos <- 0.8
+b_given_pos <- 1 - a_given_pos
+b_given_neg <- 0.65
+b_given_pos <- 1 - b_given_neg
+
+pA_given_test <- a_given_pos * rate_a /
+                 (a_given_pos * rate_a + b_given_pos * rate_b)
+pA_given_test
+```
+Probability of A given test returns an "A" reading is 69.6%
+
+Now adding the data:
+```{r}
+# P(A| positive test, twins, single) = 
+# P(positive test|A) * P(twins|A) * P(single|A) * P(A) /
+# P(postive test, twins, single)
+numerator <- a_given_pos * twin_rate_a * single_rate_a * rate_a
+
+# P(positive test, twins, single) =
+# P(positive test|A) * P(twins|A) *  P(single|A) * P(A) + 
+# (positive test|B) * P(twins|B) *  P(single|B) * P(B)
+denom <- numerator + b_given_pos * twin_rate_b * single_rate_b * rate_b
+
+numerator/denom
+```
+56.25% chance
