@@ -1,5 +1,5 @@
 ---
-title: "Statistical Rethinking Notes"
+title: "Statistical Rethinking - Problem Set Solutions"
 subtitle: "Tyler Burch"
 output: 
   pdf_document:
@@ -10,20 +10,9 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r child = 'ch1.Rmd'}
-```
-\pagebreak
-```{r child = 'ch2.Rmd'}
-```
-\pagebreak
-```{r child = 'ch3.Rmd'}
-```
-\pagebreak
-
-# Problem sets
 ```{r child = 'ch2-problems.Rmd'}
 ```
+\pagebreak
 
 ```{r child = 'ch3-problems.Rmd'}
 ```
-

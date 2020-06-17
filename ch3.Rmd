@@ -1,0 +1,146 @@
+# Chapter 3 - Sampling the Imaginary
+
+Given example of test to check for vapmirism 0 highly accurate, but makes false positives at the rate of $\text{Pr}(\text{positive test}|\text{mortal})=0.01$. Vampirism is rare, 0.1% of the population.
+
+To solve given a positive test the likelihood that they are a vampire,
+
+$$
+  \text{Pr}(\text{positive}) = \text{Pr}(\text{positive}|\text{vampire})\text{Pr}(\text{vampire}) \\+\text{Pr}(\text{positive}|\text{mortal})(1-\text{Pr}(\text{vampire}))
+$$
+and
+$$
+  \text{Pr}(\text{vampire}|\text{positive})=\frac{\text{Pr}(\text{positive}|\text{vampire})\text{Pr}(\text{vampire})}{\text{Pr}(\text{positive})}
+$$
+```{r}
+Pr_Positive_Vampire <- 0.95
+Pr_Positive_Mortal <- 0.01
+Pr_Vampire <- 0.001
+Pr_Positive <- Pr_Positive_Vampire * Pr_Vampire + 
+  Pr_Positive_Mortal * ( 1 - Pr_Vampire )
+( Pr_Vampire_Positive <- Pr_Positive_Vampire*Pr_Vampire / Pr_Positive )
+```
+
+Gives an 8.6% chance they're actually a vampire, despite positive test. This is a canonical problem, broader in statistics - despite using Bayes' theorem, not uniquely Bayesian. Reframe using _natural frequencies_:
+
+1. In a population of 100,000 people, 100 are vampires
+2. Of 100, 95 test positive
+3. Of 99,900 mortals, 999 test positive
+
+$$
+  \begin{aligned}
+  \text{Pr}(\text{vampire}|\text{positive}) &= \frac{\text{true positives}}{\text{all positives}} \\ &= \frac{95}{1094} \approx 0.087
+  \end{aligned}
+$$
+
+Chapter is focused on working from samples from posterior, to make sense of model output.
+
+## 3.1 - Sampling from a grid approximate posterior
+
+Rerun code for grid approximation posterior, then draw 10,000 samples.
+
+```{r, echo=FALSE}
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prob_p <- rep( 1 , 1000 )
+prob_data <- dbinom( 6 , size=9 , prob=p_grid ) 
+posterior <- prob_data * prob_p
+posterior <- posterior / sum(posterior)
+```
+
+```{r, fig.height=3}
+  samples <- sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+  plot(samples,col=alpha("blue",0.3), xlab = "Sample No.", ylab = "Proportion Water")
+```
+
+Can also draw a density plot:
+```{r, echo=FALSE}
+library(rethinking)
+```
+```{r, fig.height=3.5}
+  dens(samples, col=alpha("blue",0.7), 
+       xlab = "Proportion Water (p)", ylab = "Density")
+```
+
+
+## 3.2 - Sampling to Summarize
+
+Can ask many questions using your posterior: How much lies below a parameter value, or between two parameter values? Which parameter value marks the lower X%? What range contains most the posterior probability? Which parameter values are most likely?
+
+#### Intervals of defined boundaries - 
+Address probability that proportion of water is less than 0.5. Directly from grid:
+```{r}
+  sum( posterior[ p_grid < 0.5 ] )
+```
+However, if not using grid, you can use samples and get a nearly identical result:
+```{r}
+ sum( samples < 0.5 ) / 1e4
+```
+
+#### Intervals of Defined Mass -
+"Confidence intervals" commonly used, but we work with "credible interval" or "compatibility interval." To get the 80% "percentile interval" (PI):
+
+```{r}
+quantile( samples , c( 0.1 , 0.9 ) )
+```
+
+```PI``` function in rethinking package does this as well. Also ```HPDI``` is the "Highest posterior density interval," the narrowest interval containing specified probability mass. Generally this interval best represents parameter values consistent with the data. Note HPDI is more computationally intensive and suffers from variance on number of samples drawn.
+
+#### Point Estimates -
+Given the entire posterior, what number to report? Can do _maximum a posteriori_ (MAP) by taking the mode. Other point estimates (mean, median) can also work, but often worse in terms of loss function.
+
+
+## 3.3 - Sampling to Simulate Prediction
+
+Useful for:
+
+1. Model design - sampling from the prior can help understand implications
+2. Model checking - see if the fit worked correctly
+3. Software validation - does the model fitting software work alright? check by recovering parameter values
+4. Research design - simulate observations from hypothesis, can evaluate weather research design is effective, _power analysis_.
+5. Forecasting - simulate new predictions for the future
+
+#### Dummy data
+Bayesian models are always generative, capable of simulating predictions. For the globe example 
+```{r}
+dbinom( 0:2 , size=2 , prob=0.7 )
+```
+
+simulates 0, 1, 2 "water" results; 9% chance of not landing on water at all. Can simulate many dummy observations:
+
+```{r}
+trials <-1e5
+dummy_w <- rbinom( trials , size=2 , prob=0.7 ) # r for random, 10 
+table(dummy_w)/trials
+```
+which are close to analytical solution. Also can plot to make sure it looks binomial, now using 9 tosses
+
+```{r,echo=FALSE}
+library(rethinking)
+```
+```{r,fig.height=3}
+trials <-1e5
+dummy_w <- rbinom( trials , size=9 , prob=0.7 ) 
+simplehist( dummy_w , xlab="dummy water count" )
+```
+
+#### Model Checking
+
+1. Ensure the fitting worked correctly
+2. Evaluate the adequacy of the model for a purpose
+
+Don't test whether assumptions are "true," assess exactly how it fails to describe the data. Basic model checks using samples from full posterior (not point estimates!).
+
+- Observation uncertainty: sample variation - globe tossing, even if you know $p$ exactly, you won't know the next globe toss results
+- Parameter uncertainty: posterior distribution embodies this, will interact with sampling variation. Want to propagate this as evaluating predictions; computing sampling distribution at each value of $p$, averaging together, gets a "posterior predictive distribution
+
+```{r, fig.height=3}
+ w <- rbinom( 1e4 , size=9 , prob=samples )
+simplehist( w , xlab="Water count" )
+
+```
+
+Here, for each posterior sample, a random binomial dataset is created. Wide spread, but arises from the binomial process itself. Can consider other metrics, like the longest consecutive Water results (mode=3, obs=3) or number of switches between water/land (mode=4, obs=6).
+
+# 3.4 - Summary
+
+Given basic procedures for manipulating posterior distributions, can be used for intervals, point estimates, posterior predictive checks, simulations. Encapsulate uncertainty about parameters with uncertainty about outcomes.
+

@@ -1,0 +1,258 @@
+## Chapter 3 problems
+
+```{r, echo=FALSE}
+library(rethinking)
+```
+
+Given:
+```{r}
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- rep( 1 , 1000 )
+likelihood <- dbinom( 6 , size=9 , prob=p_grid ) 
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+set.seed(100)
+trial_size <- 1e4 # Tyler added
+samples <- sample( p_grid , prob=posterior , size=trial_size , replace=TRUE )
+```
+
+__3E1.__
+
+>How much posterior probability lies below p = 0.2?
+
+```{r}
+sum(samples < 0.2) / trial_size
+```
+
+__3E2.__
+
+>How much posterior probability lies above p = 0.8?
+
+```{r}
+sum(samples > 0.8) / trial_size
+```
+
+__3E3.__
+
+>How much posterior probability lies between p = 0.2 and p = 0.8?
+
+```{r}
+sum(samples < 0.8 & samples > 0.2) / trial_size
+```
+
+
+__3E4.__
+
+>20% of the posterior probability lies below which value of p?
+
+```{r}
+quantile(samples, 0.2)
+```
+
+__3E5.__
+
+>20% of the posterior probability lies above which value of p?
+
+```{r}
+quantile(samples, 1-0.2)
+```
+
+__3E6.__
+
+>Which values of p contain the narrowest interval equal to 66% of the posterior probability?
+
+```{r}
+HPDI(samples,prob=.66)
+```
+
+__3E7.__
+
+>Which values of p contain 66% of the posterior probability, assuming equal posterior probability both below and above the interval?
+
+```{r}
+PI(samples,prob=.66)
+```
+
+
+__3M1.__
+
+>Suppose the globe tossing data had turned out to be 8 water in 15 tosses. Construct the posterior distribution, using grid approximation. Use the same flat prior as before.
+
+```{r}
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prob_p <- rep( 1 , 1000 )
+prob_data <- dbinom( 8 , size=15 , prob=p_grid ) 
+posterior <- prob_data * prob_p
+posterior <- posterior / sum(posterior)
+```
+
+__3M2.__
+
+>Draw 10,000 samples from the grid approximation from above. Then use the samples to calculate the 90% HPDI for p.
+
+```{r}
+samples <- sample(p_grid, prob=posterior, size=1e5, replace=TRUE)
+HPDI(samples, prob=0.9)
+```
+
+__3M3.__
+>Construct a posterior predictive check for this model and data. This means simulate the distribution of samples, averaging over the posterior uncertainty in p. What is the probability of observing 8 water in 15 tosses?
+
+```{r, fig.height=3}
+simulations <- 1e4
+w <- rbinom( simulations, size=15 , prob=samples )
+sum(w==8)/simulations
+```
+
+__3M4.__
+
+>Using the posterior distribution constructed from the new (8/15) data, now calculate the probability of observing 6 water in 9 tosses.
+
+```{r, fig.height=3}
+simulations <- 1e4
+w_2 <- rbinom( simulations, size=9 , prob=samples )
+sum(w==6)/simulations
+```
+
+__3M5.__
+
+Start over at 3M1, but now use a prior that is zero below p=0.5 and a constant above p=0.5. This corresponds to prior information that a majority of the Earth’s surface is water. Repeat each problem above and compare the inferences. What difference does the better prior make? If it helps, compare inferences (using both priors) to the true value p = 0.7.
+
+```{r}
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior_const <- 1
+prior <- (p_grid >= 0.5) * prior_const
+prob_data_new <- dbinom( 8 , size=15 , prob=p_grid ) 
+posterior_new <- prob_data_new * prior
+posterior_new <- posterior_new / sum(posterior)
+samples_new <- sample(p_grid, prob=posterior_new, size=1e5, replace=TRUE)
+```
+
+Tackling all the old problems:
+
+```{r}
+print("Problem 2")
+HPDI(samples_new, prob=0.9)
+print("Problem 3")
+simulations <- 1e4
+w <- rbinom( simulations, size=15 , prob=samples_new )
+sum(w==8)/simulations
+print("Problem 4")
+w_2 <- rbinom( simulations, size=9 , prob=samples_new )
+sum(w==6)/simulations
+```
+
+HPDI is far narrower. Likelihood of 8/15 is slightly increased, likelihood of 6/9 increases considerably - effectively we've removed the opportunity for fewer than 50% water cases to be considered, which will subsequently increase the likelihood of all >50% cases.
+
+__3M6.__
+
+>Suppose you want to estimate the Earth’s proportion of water very precisely. Specifically, you want the 99% percentile interval of the posterior distribution of p to be only 0.05 wide. This means the distance between the upper and lower bound of the interval should be 0.05. How many times will you have to toss the globe to do this?
+
+```{r}
+
+
+interval_width <- 1
+nSimulations <- 0
+p <- 0.7
+while (interval_width > 0.05)
+{
+  nSimulations <- nSimulations + 10
+  p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+  prob_p <- rep( 1 , 1000 )
+  
+  # Simulate data
+  simulations <- nSimulations
+  likelihood <- dbinom( round(simulations*p), size=simulations, prob=p_grid )
+  posterior <- likelihood * prob_p
+  posterior <- posterior / sum(posterior)
+  #print(posterior)
+  trial_size <- 1e4
+  #print(trial_size)
+  samples <- sample( p_grid , prob=posterior , size=trial_size , replace=TRUE )
+  interval_width <- quantile(samples,0.995) - quantile(samples, 0.005)
+}
+nSimulations
+```
+About 2200 trials.
+
+
+__3H1.__
+
+>Using grid approximation, compute the posterior distribution for the probability of a birth being a boy. Assume a uniform prior probability. Which parameter value maximizes the posterior probability?
+
+```{r,echo=FALSE}
+data(homeworkch3)
+```
+
+```{r}
+all_births <- c(birth1,birth2)
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- rep( 1 , 1000 ) #Uniform
+likelihood <- dbinom( sum(all_births) , size=length(all_births) , prob=p_grid ) 
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+p_grid[which.max(posterior)]
+```
+
+__3H2.__
+
+>Using the sample function, draw 10,000 random parameter values from the posterior distri- bution you calculated above. Use these samples to estimate the 50%, 89%, and 97% highest posterior density intervals.
+
+```{r}
+trial_size <- 10000
+samples <- sample( p_grid , prob=posterior , size=trial_size , replace=TRUE )
+HPDI(samples, prob=.5)
+HPDI(samples, prob=.89)
+HPDI(samples, prob=.97)
+```
+
+
+__3H3.__
+Use rbinom to simulate 10,000 replicates of 200 births. You should end up with 10,000 numbers, each one a count of boys out of 200 births. Compare the distribution of predicted numbers of boys to the actual count in the data (111 boys out of 200 births). There are many good ways to visualize the simulations, but the dens command (part of the rethinking package) is probably the easiest way in this case. Does it look like the model fits the data well? That is, does the distribution of predictions include the actual observation as a central, likely outcome?
+
+```{r}
+sim <- rbinom(10000, size=200, prob=samples)
+hist(sim, c="skyblue3", breaks=50, xlab="Number of boys", main="")
+abline(v=sum(all_births), col="firebrick")
+```
+
+Fits right on mean, this seems like a likely outcome.
+
+
+
+__3H4.__
+
+Now compare 10,000 counts of boys from 100 simulated first borns only to the number of boys in the first births, birth1. How does the model look in this light?
+
+```{r}
+sim <- rbinom(10000, size=100, prob=samples)
+hist(sim, c="skyblue3", breaks=50, xlab="Number of First Born Boys", main="")
+abline(v=sum(birth1), col="firebrick")
+```
+
+It's not on the maximum likelihood location, but it's still a reasonable value.
+
+```{r}
+sprintf("Value: %i",sum(birth1))
+PI(sim,prob=0.60)
+```
+The value is within the inner 60% of posterior density
+
+
+__3H5.__
+
+The model assumes that sex of first and second births are independent. To check this assumption, focus now on second births that followed female first borns. Compare 10,000 simulated counts of boys to only those second births that followed girls. To do this correctly, you need to count the number of first borns who were girls and simulate that many births, 10,000 times. Compare the counts of boys in your simulations to the actual observed count of boys following girls. How does the model look in this light? Any guesses what is going on in these data?
+
+```{r}
+boys_after_girls <- birth2[birth1==0 & birth2 ==1]
+sum(boys_after_girls)
+```
+39 cases of boys born after a girl
+
+```{r, fig.height=3.5}
+count_first_girls <- sum(birth1==0)
+sim_girl <- rbinom(10000, size=count_first_girls, prob=samples)
+dens(sim_girl, xlab="Boys following girls", main="")
+```
+
+This doesn't look like anything normal. The biggest thing is that binomial assumes that trials are independent, and it's very possible these are not.
