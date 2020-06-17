@@ -153,7 +153,7 @@ note - quadratic is solved by computing the Hessian, a square matrix of second d
 **Markov chain Monte Carlo (MCMC)** - Many models, like multilevel/mixed-effects don't work for grid approximation (many parameters) or quadratic (non-Gaussian posterior). Function to maximize isn't known, computed in pieces via MCMC. Rather than computing or approximating posterior, MCMC draws samples, a collection of parameter values.
 
 <center>
-![MCMC with 1000 samples](ch2-plots/mcmc.png)
+![MCMC with 1000 samples](ch2/ch2-plots/mcmc.png)
 </center>
 
 ## 2.5 - Summary

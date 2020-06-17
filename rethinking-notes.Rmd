@@ -10,20 +10,20 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r child = 'ch1.Rmd'}
+```{r child = 'ch1/ch1.Rmd'}
 ```
 \pagebreak
-```{r child = 'ch2.Rmd'}
+```{r child = 'ch2/ch2.Rmd'}
 ```
 \pagebreak
-```{r child = 'ch3.Rmd'}
+```{r child = 'ch3/ch3.Rmd'}
 ```
 \pagebreak
 
 # Problem sets
-```{r child = 'ch2-problems.Rmd'}
+```{r child = 'ch2/ch2-problems.Rmd'}
 ```
 
-```{r child = 'ch3-problems.Rmd'}
+```{r child = 'ch3/ch3-problems.Rmd'}
 ```
 
