@@ -196,7 +196,7 @@ p_grid[which.max(posterior)]
 
 __3H2.__
 
->Using the sample function, draw 10,000 random parameter values from the posterior distri- bution you calculated above. Use these samples to estimate the 50%, 89%, and 97% highest posterior density intervals.
+>Using the sample function, draw 10,000 random parameter values from the posterior distribution you calculated above. Use these samples to estimate the 50%, 89%, and 97% highest posterior density intervals.
 
 ```{r}
 trial_size <- 10000
@@ -222,7 +222,7 @@ Fits right on mean, this seems like a likely outcome.
 
 __3H4.__
 
-Now compare 10,000 counts of boys from 100 simulated first borns only to the number of boys in the first births, birth1. How does the model look in this light?
+>Now compare 10,000 counts of boys from 100 simulated first borns only to the number of boys in the first births, birth1. How does the model look in this light?
 
 ```{r}
 sim <- rbinom(10000, size=100, prob=samples)
