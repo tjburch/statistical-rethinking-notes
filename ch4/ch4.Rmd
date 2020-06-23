@@ -1,0 +1,379 @@
+# Chapter 4 - Geocentric Models
+```{r, echo=FALSE}
+library(rethinking)
+```
+
+
+Ptolemy came up with an extremely accurate geocentric modle of our solar system in 1st century, and used for over 1000 years. Based on epicycle - circles on circles, which generalize to a Fourier series with enough circles. Comparison to linear regression - don't want to read too literally, but useful.
+
+## 4.1 Why normal distributions are normal
+
+#### Normal by Addition
+
+Introduce from a random walk perspective:
+```{r, fig.height=3}
+pos <- replicate( 10000 , sum( runif(16,-1,1) ) )
+dens(pos,  norm.comp=TRUE)
+```
+
+Gaussian structure ultimately emerges - processes that add together random values result in gaussians.
+
+#### Normal by Multiplication
+
+Consider an organism with growth rate influenced by local interactions; multiplicative effect. Sample growth rates between 1.0 and 1.1:
+
+```{r}
+growth <- replicate( 10000 , prod( 1 + runif(12,0,0.1) ) )
+dens( growth , norm.comp=TRUE )
+```
+
+
+#### Normal by log-multiplication
+
+Large deviates multiplied don't produce gaussians, but do produce gaussians at log scale
+
+```{r}
+log.big <- replicate( 10000 , log(prod(1 + runif(12,0,0.5))) )
+dens(log.big, norm.comp=TRUE )
+```
+
+
+This is because adding logs is the equivalent to multiplying original numbers.
+
+#### Using Gaussian Distributions
+
+Rest of chapter will be using Gaussians as a skeleton; 2 justifications
+
+- Ontological - World is full of approximate gaussians. Gaussian is a member of the "exponential family," all of which are important for science and seen in the natural world.
+
+- Epistemological - Represents a state of ignorance: all we know or are willing to say is mean and variance. Premised on Information theory and maximum entropy (chapters 7 and 10).
+
+## 4.2 - A language for describing models
+
+1. Recognize a set of variables to understand. Observable ones are data, unobservable are parameters.
+2. For each variable define in terms of other variables or a probability distribution.
+3. The combination of variables and probability distributions defines a _joint generative model_.
+
+Then summarize the model, e.g.
+
+$$
+  y_i \sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i = \beta x_i\\
+  \beta \sim \text{Normal}(0, 10)\\
+  \sigma \sim  \text{Exponential}(1)\\
+  x_i \sim \text{Normal}(0,1)
+$$
+
+Immense flexibility with this - don't need to worry about conditions like homoscedasticity since in the model devinition, natural ways to change assumptions so not stuck in fixed model type.
+
+#### Redescribing globe tossing
+
+$$
+  W \sim \text{Binomial}(N,p)\\
+  p \sim \text{Uniform}(0,1)
+$$
+Said: "Count W is distributed binomially, sample size $N$, probability $p$. Prior for $p$ is uniform between 0 and 1.
+
+Both are stochastic, which is indicated by $\sim$, and implies not known with certainty, just probabilistic.
+
+## 4.3 - Gaussian model of height
+
+Building a linear regression model, consider all gaussians, so posterior is a distribution of gaussian distributions
+
+
+#### Data 
+
+1960s partial census data from foraging population of !Kung San
+
+```{r}
+library(rethinking)
+data(Howell1)
+d<- Howell1 #dataframe object
+d2 <- d[ d$age >=18 , ] # Create new, just adult one
+precis(d2)
+```
+
+
+#### The model 
+
+Adult heights from a single population are approximately normal, so model using Gaussian, but which one? Model is:
+
+$$
+h_i \sim \text{Normal}(\mu,\sigma)\\
+\mu \sim \text{Normal}(178, 20)\\
+\sigma \sim \text{Uniform}(0,50)
+$$
+Estimate on mean of $\mu$ comes from author height being 178 cm, so $178 \pm 40$ seems reaasonable. Sigma a 0 because standard deviations need to be positive. Plotting priors:
+
+```{r}
+par(mfrow=c(1,2))
+curve( dnorm( x , 178 , 20 ) , from=100 , to=250, xlab=expression(mu))
+curve( dunif( x , 0 , 50 ) , from=-10 , to=60, xlab=expression(sigma))
+```
+
+**Prior predictive** simulation should be run, to see implications of prior choices.
+
+```{r}
+sample_mu <- rnorm( 1e4 , 178 , 20 )
+sample_sigma <- runif( 1e4 , 0 , 50 )
+prior_h <- rnorm( 1e5 , sample_mu , sample_sigma ) 
+dens( prior_h )
+```
+
+You could consider a less informative prior, e.g. $\mu \sim \text{Normal}(178,100)$, but this will give you odd things like negative heights, or people taller than the record tallest person - this is why these tests are useful.
+
+#### Grid approximation of posterior
+
+Worth running posterior since first multi-parameter model and first gaussian. Code given without explanation :)
+
+```{r}
+mu.list <- seq( from=150, to=160 , length.out=100 ) 
+sigma.list <- seq( from=7 , to=9 , length.out=100 ) 
+post <- expand.grid( mu=mu.list , sigma=sigma.list ) 
+post$LL <- sapply( 1:nrow(post) , function(i) sum(
+  dnorm( d2$height , post$mu[i] , post$sigma[i] , log=TRUE ) ) ) 
+post$prod <- post$LL + dnorm( post$mu , 178 , 20 , TRUE ) +
+    dunif( post$sigma , 0 , 50 , TRUE ) 
+post$prob <- exp( post$prod - max(post$prod) )
+contour_xyz( post$mu , post$sigma , post$prob,
+            xlab=expression(paste("Sample ",mu)), 
+            ylab=expression(paste("Sample ",sigma)))
+```
+
+```{r}
+ image_xyz( post$mu , post$sigma , post$prob , 
+            xlab=expression(paste("Sample ",mu)), 
+            ylab=expression(paste("Sample ",sigma)))
+```
+
+Sampling posterior
+
+```{r}
+sample.rows <- sample( 1:nrow(post) , size=1e4 , replace=TRUE , prob=post$prob )
+sample.mu <- post$mu[ sample.rows ] 
+sample.sigma <- post$sigma[ sample.rows ]
+plot( sample.mu , sample.sigma , cex=0.5 , pch=16 , col=col.alpha(rangi2,0.1) )
+```
+
+(note - the text has a different plot for this, theirs has no horizontal spaces, oddly)
+
+
+```{r}
+par(mfrow=c(1,2))
+dens( sample.mu , main=expression(mu)) 
+dens( sample.sigma, main=expression(sigma) )
+```
+
+Here we can see something has gone odd with the posterior $\mu$. Regardless, this is sampling of the _marginal_ posteror density, meaning averaging over other parameters.
+
+#### Finding the posterior with quap
+
+Moving onto quadratic approximation (repeating some code for clarity).
+
+```{r}
+# Load Data
+data(Howell1)
+d <- Howell1
+d2 <- d[ d$age >= 18 , ] # Select Adults
+
+flist <- alist(
+  height ~ dnorm( mu , sigma ), # height ~ Normal(mu,sigma)
+  mu ~ dnorm( 178 , 20 ),  # mu ~ Normal (178, 20)
+  sigma ~ dunif( 0 , 50 ) #sigma ~ Uniform(0,50)
+)
+
+# Fit the model to the data in the frame
+start <- list( # Give nice starting location
+  mu=mean(d2$height),
+  sigma=sd(d2$height)
+)
+m4.1 <- quap( flist , data=d2 , start=start)
+# Look at posterior
+precis( m4.1 , prob=0.95)
+```
+
+This shows the marginal distribution of each parameter - 
+
+#### Sampling from a quap
+
+When R constructs quadractic, it calculates covariances, which are sufficient to make gaussians. Variance-covariance matrix given by:
+
+```{r}
+vcov( m4.1 )
+```
+Decomposition:
+```{r}
+diag( vcov( m4.1 ) ) 
+cov2cor( vcov( m4.1 ) )
+```
+
+Sample vectors from of values from multi-dimensional Gaussian distribution (provided by rethinking package) 
+
+```{r}
+post <- extract.samples( m4.1 , n=1e4 ) 
+precis(post)
+```
+
+
+## 4.4 - Linear Prediction
+
+Typically interested in how outcome is related to a _predictor variable_. Plot height and weight to see how well they covary.
+
+```{r}
+plot( d2$height ~ d2$weight )
+```
+
+#### Linear Model Strategy 
+
+Strategy - make parameter for the mean of a gaussian $\mu$ into a linear function of the predictor variable and other new parameters we invent. Instructs the analysis to assume that the predictor has a **constant** and **additive** relationship to the mean of the outcome.
+
+Basically - "consider all lines that relate one variable to the other, rank in order of plausibility given the data"
+
+Before our Gaussian model was:
+$$
+  h_i \sim \text{Normal}(\mu,\sigma)\\
+  \mu \sim \text{Normal}(178,20)\\
+  \sigma \sim \text{Uniform}(0,50)
+$$
+
+To get weight into the gaussian model we instead relate the two, letting $x$ be the column of weight measurements, with average $\bar{x}$
+$$
+  h_i \sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i = \alpha + \beta(x_i-\bar{x})\\
+  \alpha \sim \text{Normal}(178,20)\\
+  \beta \sim \text{Normal}(0,10)\\
+  \alpha \sim \text{Uniform}(0,50)
+$$
+
+Step by step:
+
+$h_i \sim \text{Normal}(\mu_i,\sigma)$, the probability of the observed height, this is basically unchanged, except $\mu$ has been replaced by $\mu_i$, implying mean depends on row.
+
+$\mu_i = \alpha + \beta(x_i-\bar{x})$, the linear model. No longer estimate $\mu$, construct from other parameters. Notice, not stochastic ($=$, not $\sim$), meaning this is deterministic; once we know $\alpha$ and $\beta$ and $x_i$, we know $mu_i$. $alpha$ and $\beta$ are made up, just devices for manipulating $\mu$; think of them as targets of learning.
+
+The rest are priors. All have been seen before except $\beta$. If we look at many values of $\beta$:
+
+```{r,echo=FALSE}
+#par(mfrow=c(1,2))
+set.seed(2971)
+N <- 100
+a <- rnorm( N , 178 , 20 ) 
+b <- rnorm( N , 0 , 10 )
+plot( NULL , xlim=range(d2$weight) , ylim=c(-100,400) , xlab="weight" , ylab="height" )
+abline( h=0 , lty=2 )
+abline( h=272 , lty=1 , lwd=0.5 )
+mtext( "b ~ dnorm(0,10)" )
+xbar <- mean(d2$weight)
+for ( i in 1:N ) curve( a[i] + b[i]*(x - xbar) , 
+                        from=min(d2$weight) , 
+                        to=max(d2$weight) ,
+                        add=TRUE , 
+                        col=col.alpha("black",0.2) )
+```
+
+We can immediately see that this is barely constrained, even negative values. Try swapping it for something more useful, $\beta \sim \text{Log-Normal}(0,1)$
+
+```{r,echo=FALSE}
+b <- rlnorm( 1e4 , 0 , 1 )
+dens( b , xlim=c(0,5) , adj=0.1 )
+set.seed(2971)
+N <- 100 # 100 lines a <- rnorm( N , 178 , 20 )
+b <- rlnorm( N , 0 , 1 )
+plot( NULL , xlim=range(d2$weight) , ylim=c(-100,400) , xlab="weight" , ylab="height" )
+abline( h=0 , lty=2 )
+abline( h=272 , lty=1 , lwd=0.5 )
+mtext( "log(b) ~ dnorm(0,10)" )
+xbar <- mean(d2$weight)
+for ( i in 1:N ) curve( a[i] + b[i]*(x - xbar) , 
+                        from=min(d2$weight) , 
+                        to=max(d2$weight) ,
+                        add=TRUE , 
+                        col=col.alpha("black",0.2) )
+```
+
+Much better constraints.
+
+#### Finding the posterior
+
+Let's define full model:
+
+```{r}
+data(Howell1)
+d <- Howell1
+d2 <- d[ d$age >= 18 , ]
+# define the average weight, x-bar 
+xbar <- mean(d2$weight)
+# fit model 
+m4.3 <- quap(
+alist(
+  height ~ dnorm( mu , sigma ) , 
+  mu <- a + b*( weight - xbar ) , 
+  a ~ dnorm( 178 , 20 ) ,
+  b ~ dlnorm( 0 , 1 ) ,
+  sigma ~ dunif( 0 , 50 ) ),
+data=d2 )
+```
+
+
+### Interpreting the posterior 
+
+Table approach:
+```{r}
+precis(m4.3, prob=.95)
+```
+
+The new parameter, $\beta$, is a slope - interpret as "a person 1 kg heavier is expected to be .9 cm taller." 95% of the posterior is between 0.82 and 0.99, so values around 0 or higher than 1 are highly incompatible with these data and model. This is _not_ evidence the relationship is linear, but saying "if you commit to lines, ones around 0.9 slope are reasonable."
+
+```{r}
+ round( vcov( m4.3 ) , 3 )
+```
+```{r}
+pairs(m4.3)
+```
+Low covariation.
+
+#### Plotting posterior inference against the data 
+
+Always useful to plot posterior over data to check fit worked, and to interpret posterior.
+
+```{r}
+plot( height ~ weight , data=d2 , col=rangi2 ) 
+post <- extract.samples( m4.3 )
+a_map <- mean(post$a)
+b_map <- mean(post$b)
+curve( a_map + b_map*(x - xbar) , add=TRUE )
+```
+
+#### Adding uncertainty around mean
+
+While that's the most plausible line, many others are possible, looking at these are good for communicating uncertainty.
+
+```{r}
+N <- 350
+dN <- d2[ 1:N , ] 
+mN <- quap(
+  alist(
+  height ~ dnorm( mu , sigma ) ,
+  mu <- a + b*( weight - mean(weight) ) , 
+  a ~ dnorm( 178 , 20 ) ,
+  b ~ dlnorm( 0 , 1 ) ,
+  sigma ~ dunif( 0 , 50 )
+  ) , data=dN )
+
+# extract 20 samples from the posterior 
+post <- extract.samples( mN , n=20 )
+# display raw data and sample size
+plot( dN$weight , dN$height ,
+    xlim=range(d2$weight) , ylim=range(d2$height) ,
+    col=rangi2 , xlab="weight" , ylab="height" )
+mtext(concat("N = ",N))
+# plot the lines, with transparency
+for ( i in 1:50 )
+  curve( post$a[i] + post$b[i]*(x-mean(dN$weight)) , 
+         col=col.alpha("black",0.3) , add=TRUE )
+```
+
+For 350 points, 50 possible lines.
+
+#### Plotting regression intervals and contours
+
