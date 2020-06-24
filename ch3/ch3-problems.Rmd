@@ -1,6 +1,6 @@
 ## Chapter 3 problems
 
-```{r, echo=FALSE}
+```{r, include=FALSE}
 library(rethinking)
 ```
 
