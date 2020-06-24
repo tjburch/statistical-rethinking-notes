@@ -16,3 +16,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r child = 'ch3/ch3-problems.Rmd'}
 ```
+\pagebreak
+```{r child = 'ch4/ch4-problems.Rmd'}
+```
