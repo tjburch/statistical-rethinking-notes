@@ -6,6 +6,7 @@ output:
     toc: no
 ---
 
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -21,6 +22,11 @@ knitr::opts_chunk$set(echo = TRUE)
 \pagebreak
 ```{r child = 'ch4/ch4.Rmd'}
 ```
+\pagebreak
+```{r child = 'ch5/ch5.Rmd'}
+```
+\pagebreak
+
 
 # Problem sets
 ```{r child = 'ch2/ch2-problems.Rmd'}
