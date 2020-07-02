@@ -1,0 +1,178 @@
+# Chapter 5 - The Many Variables & The Spurious Waffles
+```{r, include=FALSE}
+library(rethinking)
+```
+
+Title explanation: Waffle Houses are an index to disaster severity, opening quickly after severe events. Also correlated to divorce rates, this is a spurious correlation - it's a southern establishment, and the south has high divorce rates. Need to distinguish correlations from causation.
+
+**Multiple Regression** - using multiple predictors to model an outcome. Useful for:
+
+- Acting as a statistical control for confounds
+- Multiple causation
+- Interactions between variables (not dealt with in this chapter)
+
+Also looking at **causal inference** this chapter, using graphs.
+
+## 5.1 Spurious Association
+
+Test problem now divorce as a function of marriage rate, median marriage age. Straightforward linear regression.
+
+```{r}
+# load data and copy 
+data(WaffleDivorce) 
+d <- WaffleDivorce
+# standardize variables
+d$A <- scale( d$MedianAgeMarriage ) 
+d$D <- scale( d$Divorce )
+
+# Build model and sample
+m5.1 <- quap( 
+  alist(
+    D ~ dnorm( mu , sigma ) ,
+    mu <- a + bA * A ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bA ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+  ) , data = d )
+
+set.seed(10)
+prior <- extract.prior( m5.1 )
+mu <- link( m5.1 , post=prior , data=list( A=c(-2,2) ) )
+plot( NULL , xlim=c(-2,2) , ylim=c(-2,2), 
+      xlab="Median Marriage Age (std units)", ylab="Divorce Rate (std units)" )
+for ( i in 1:50 ) lines( c(-2,2) , mu[i,] , col=col.alpha("black",0.4) )
+```
+
+
+Looking at posterior
+
+```{r}
+# compute percentile interval of mean
+A_seq <- seq( from=-3 , to=3.2 , length.out=30 ) 
+mu <- link( m5.1 , data=list(A=A_seq) )
+mu.mean <- apply( mu , 2, mean)
+mu.PI <- apply( mu , 2, PI)
+
+# plot it all
+plot( D ~ A , data=d , col=rangi2 , xlab="Median Marriage Age (std)", ylab="Divorce Rate (std")
+lines( A_seq , mu.mean , lwd=2 )
+shade( mu.PI , A_seq )
+```
+
+```{r,echo=FALSE}
+d$M <- scale( d$Marriage ) 
+m5.2 <- quap(
+  alist(
+    D ~ dnorm( mu , sigma ) , 
+    mu <- a + bM * M ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bM ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+  ) , data = d )
+```
+
+
+To make sense, we need to work on causation.
+
+### Think before you regress
+
+Three variables: Divorce rate ($D$), marriage rate ($M$), median age of marriage ($A$).
+
+Set up a Directed Acyclic Graph (DAG)
+
+```{r, fig.height=2}
+library(dagitty)
+dag5.1 <- dagitty( "dag {
+  A -> D 
+  A -> M 
+  M -> D
+}")
+coordinates(dag5.1) <- list( x=c(A=0,D=1,M=2) , y=c(A=0,D=1,M=0) ) 
+drawdag( dag5.1 )
+```
+
+Depicts the directions of influence - Age affects both marriages and divorce, marriages affect divorces. Have to account for each path, $A\rightarrow D$ and $A \rightarrow M \rightarrow D$.
+
+$A \rightarrow M \rightarrow D$ path does little work, we know marriage is positively associated with divorce. The graph could also be something like this:
+
+```{r, fig.height=2}
+dag5.1 <- dagitty( "dag { D <- A -> M}")
+coordinates(dag5.1) <- list( x=c(A=0,D=1,M=2) , y=c(A=0,D=1,M=0) ) 
+drawdag( dag5.1 )
+```
+
+Also plausible - Carefully consider each DAG to know which is correct.
+
+**Testable Implications** - 
+
+Compare the two DAGs, the second gives the implication that once we've conditioned on $A$, $M$ tells us nothing more about $D$; $D$ is independent of $M$ conditional of $A$ $(D \perp \!\!\! \perp M|A)$
+
+Code version of that:
+
+```{r}
+DMA_dag2 <- dagitty('dag{ D <- A -> M }') 
+impliedConditionalIndependencies( DMA_dag2 )
+```
+
+Compared to:
+
+```{r}
+DMA_dag1 <- dagitty('dag{ D <- A -> M -> D }') 
+impliedConditionalIndependencies( DMA_dag1 )
+```
+
+(no conditional indpendencies, so no output)
+
+To test: need a model that conditions on $A$, so we can see weather that renders $D$ independent of $M$, multiple regression can do this.
+
+Answers the question "Is there any additional value in knowing a variable, once I already know all of the other predictor variables?"
+
+Note - often this question is framed as "controlling for one variable while estimating another," but statistical control is different from experimental so a bit sloppy.
+
+#### Notation
+
+Strategy:
+
+1. Nominate predictor variables you want in linear model
+2. For each, make a parameter that will measure it's association
+3. Multiply
+
+e.g.
+
+\begin{align*}
+  D_i &\sim \text{Normal}(\mu,\sigma)\\
+  \mu_i &= \alpha + \beta_M M_i + \beta_A A_i\\
+  \alpha &\sim \text{Normal}(0,0.2)\\
+  \beta_M &\sim \text{Normal}(0,0.5)\\
+  \beta_A &\sim \text{Normal}(0,0.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+$M$ for marriage rate, $A$ for age of marriage. One sample way to read this is "a divorce rate is a function of its marriage rate or median age at marriage" (read $+$ as "or").
+
+```{r}
+d$M <- scale( d$Marriage )
+m5.3 <- quap( 
+  alist(
+    D ~ dnorm( mu , sigma ) , 
+    mu <- a + bM*M + bA*A , 
+    a ~ dnorm( 0 , 0.2 ) , 
+    bM ~ dnorm( 0 , 0.5 ) , 
+    bA ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+    ) , data = d ) 
+precis( m5.3 )
+```
+
+Visualization of posterior
+
+```{r,fig.height=4}
+plot( coeftab(m5.1,m5.2,m5.3), par=c("bA","bM"))
+```
+
+89% compatibility shown, top is bA, bottom is bM. 
+
+- bA doesn't move much, uncertainty grows
+- bM only associated with divorce when age is missing from the model
+
+So there is little to no additional predictive power in knowing the rate of marriage in a state/no direct causal path from marriage rate to divorce rate. Meaning, model 2 is the better one.
