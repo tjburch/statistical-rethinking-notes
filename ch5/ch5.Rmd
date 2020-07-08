@@ -46,7 +46,7 @@ for ( i in 1:50 ) lines( c(-2,2) , mu[i,] , col=col.alpha("black",0.4) )
 
 Looking at posterior
 
-```{r}
+```{r, warning=FALSE}
 # compute percentile interval of mean
 A_seq <- seq( from=-3 , to=3.2 , length.out=30 ) 
 mu <- link( m5.1 , data=list(A=A_seq) )
@@ -166,7 +166,7 @@ precis( m5.3 )
 
 Visualization of posterior
 
-```{r,fig.height=4}
+```{r}
 plot( coeftab(m5.1,m5.2,m5.3), par=c("bA","bM"))
 ```
 
@@ -176,3 +176,141 @@ plot( coeftab(m5.1,m5.2,m5.3), par=c("bA","bM"))
 - bM only associated with divorce when age is missing from the model
 
 So there is little to no additional predictive power in knowing the rate of marriage in a state/no direct causal path from marriage rate to divorce rate. Meaning, model 2 is the better one.
+
+
+#### Plotting multivariate posteriors
+
+**Predictor residual plots** - useful for understanding statistical model
+
+Model has 2 predictors: $M$, marriage rate and $A$, median age. For residuals, you use the other predictor to model it. Residuals are found by subtracting observed from model.
+
+\begin{align*}
+  M_i &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i &= \alpha + \beta_A A_i\\
+  \alpha &\sim \text{Normal}(0,0.2)\\
+  \beta &\sim \text{Normal}(0,0.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+
+```{r}
+m5.4 <- quap(
+  alist(
+    M ~ dnorm( mu , sigma ) , 
+    mu <- a + bAM * A ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bAM ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+  ) , data = d )
+
+mu <- link(m5.4)
+mu_mean <- apply( mu , 2 , mean ) 
+mu_resid <- d$M - mu_mean
+```
+
+Brings home message that regression models measure the remaining association of each predictor with the outcome, after knowing the other predictors - computing the residuals shows this yourself, but with the unified model it happens automatically.
+
+
+2. Posterior prediction plots - check fit and assess predictions, not causal tools
+
+Just plot posterior against data, more easily diagnoses errors or why it could fail.
+
+```{r}
+# call link without specifying new data # so it uses original data
+mu <- link( m5.3 )
+# summarize samples across cases 
+mu_mean <- apply( mu , 2 , mean ) 
+mu_PI <- apply( mu , 2 , PI )
+# simulate observations
+# again no new data, so uses original data 
+D_sim <- sim( m5.3 , n=1e4 )
+D_PI <- apply( D_sim , 2 , PI )
+
+plot( mu_mean ~ d$D , col=rangi2 , ylim=range(mu_PI) , 
+      xlab="Observed divorce" , ylab="Predicted divorce" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(d) ) lines( rep(d$D[i],2) , mu_PI[,i] , col=rangi2 )
+```
+
+From this, understand that model under-predicts states with high divorce rates, and over-predicts those with low rates (89% CI shown). Several problematic ones, e.g. Idaho and Utah, high above the mean (high Latter Day Saints population with low divorce rate, cna consider demographic compositions).
+
+
+3. Counterfactual plots - explore causal implications of manipulating variables
+
+Display implied predictions of the model - pick an intervention variable, define a range for it, simulate other values including outcome. Consider the DAG where $M$ affects $D$.
+
+```{r}
+data(WaffleDivorce) 
+d <- list()
+d$A <- standardize( WaffleDivorce$MedianAgeMarriage )
+d$D <- standardize( WaffleDivorce$Divorce )
+d$M <- standardize(WaffleDivorce$Marriage )
+m5.3_A <- quap( 
+  alist(
+    ## A -> D <- M
+    D ~ dnorm( mu , sigma ) , 
+    mu <- a + bM*M + bA*A , 
+    a ~ dnorm( 0 , 0.2 ) , 
+    bM ~ dnorm( 0 , 0.5 ) , 
+    bA ~ dnorm( 0 , 0.5 ) ,
+    sigma ~ dexp( 1 ),
+    ## A -> M
+    M ~ dnorm( mu_M , sigma_M ), 
+    mu_M <- aM + bAM*A,
+    aM ~ dnorm( 0 , 0.2 ),
+    bAM ~ dnorm( 0 , 0.5 ), 
+    sigma_M ~ dexp( 1 )
+) , data = d )
+precis(m5.3_A)
+```
+
+
+This model shows $M$ and $A$ are strongly negatively associated, so manipulate $A$ for 30 observations around 2 sigma of the mean.
+
+```{r}
+A_seq <- seq( from=-2 , to=2 , length.out=30 )
+# prep data
+sim_dat <- data.frame( A=A_seq )
+# simulate M and then D, using A_seq
+s <- sim( m5.3_A , data=sim_dat , vars=c("M","D") )
+
+# display counterfactual predictions
+plot( sim_dat$A , colMeans(s$D) , ylim=c(-2,2) , type="l" ,
+      xlab="manipulated A" , ylab="counterfactual D" ) 
+shade( apply(s$D,2,PI) , sim_dat$A )
+mtext( "Total counterfactual effect of A on D" )
+```
+```{r}
+plot( sim_dat$A , colMeans(s$M) , ylim=c(-2,2) , type="l" ,
+      xlab="manipulated A" , ylab="counterfactual M" ) 
+shade( apply(s$M,2,PI) , sim_dat$A )
+mtext( "Counterfactual effect of A -> M" )
+```
+
+The trick: when you manipulate a variable, you break the causal influence of other vairables on it. For example, try breaking the causal chain from A->M.
+
+```{r, fig.height=2}
+dag_2 <- dagitty( "dag { A -> D <- M}")
+coordinates(dag_2) <- list( x=c(A=0,D=1,M=2) , y=c(A=0,D=1,M=0) ) 
+drawdag( dag_2 )
+```
+
+```{r}
+sim_dat <- data.frame( M=seq(from=-2,to=2,length.out=30) , A=0 ) 
+s <- sim( m5.3_A , data=sim_dat , vars="D" )
+
+plot( sim_dat$M , colMeans(s) , ylim=c(-2,2) , type="l" , 
+      xlab="manipulated M" , ylab="counterfactual D" )
+shade( apply(s,2,PI) , sim_dat$M )
+mtext( "Total counterfactual effect of M on D" )
+```
+
+
+Only simulate $D$, not $A$ since $M$ doesn't influence it - notice the effect is not strong.
+
+
+## 5.2 - Masked Relationship
+
+
+
+
