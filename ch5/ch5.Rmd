@@ -13,7 +13,7 @@ Title explanation: Waffle Houses are an index to disaster severity, opening quic
 
 Also looking at **causal inference** this chapter, using graphs.
 
-## 5.1 Spurious Association
+## 5.1 - Spurious Association
 
 Test problem now divorce as a function of marriage rate, median marriage age. Straightforward linear regression.
 
@@ -311,6 +311,269 @@ Only simulate $D$, not $A$ since $M$ doesn't influence it - notice the effect is
 
 ## 5.2 - Masked Relationship
 
+Previous section showed multiple predictors are useful for dealing with spurious correlation. Next, look at measuring direct influences of multiple factors on an outcome when none is apparent from bivariate relationships - occurs when predictors are correlated, one positive, one negative.
+
+New dataset - composition of milk across species.
+
+```{r}
+library(rethinking) 
+data(milk)
+d <- milk
+str(d)
+```
+
+Hypothesis - larger brain -> more energgetic milk. Look at $K$, calories per g of milk, $M$, body mass, and $N$, neocortex mass percent of the brain.
+
+```{r}
+d$K <- scale( d$kcal.per.g ) 
+d$N <- scale( d$neocortex.perc ) 
+d$M <- scale( log(d$mass) )
+```
+
+Model:
+
+\begin{align*}
+  K_i &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i = \alpha + \beta_N N_i
+\end{align*}
+
+Text asks us to try a model that will fail, giving an error that "initial value in 'vmmin' is not finite." This comes from NANs in neocortex size. We'll do drops now.
+
+```{r}
+ dcc <- d[ complete.cases(d$K,d$N,d$M) , ]
+m5.5_draft <- quap( 
+    alist(
+      K ~ dnorm( mu , sigma ) , 
+      mu <- a + bN*N ,
+      a ~ dnorm( 0 , 1 ) ,
+      bN ~ dnorm( 0 , 1 ) , 
+      sigma ~ dexp( 1 )
+) , data=dcc )
+prior <- extract.prior( m5.5_draft )
+xseq <- c(-2,2)
+mu <- link( m5.5_draft , post=prior , data=list(N=xseq) )
+plot( NULL , xlim=xseq , ylim=xseq ,  
+      xlab="Neocortex % (std)", ylab="kCal per g (std)")
+for ( i in 1:50 ) lines( xseq , mu[i,] , col=col.alpha("black",0.3) )
+```
+
+
+Crazy priors, let's tighten them.
+
+```{r}
+m5.5 <- quap( 
+  alist(
+    K ~ dnorm( mu , sigma ) , 
+    mu <- a + bN*N ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bN ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+) , data=dcc )
+prior <- extract.prior( m5.5 )
+xseq <- c(-2,2)
+mu <- link( m5.5 , post=prior , data=list(N=xseq) )
+plot( NULL , xlim=xseq , ylim=xseq , 
+      xlab="Neocortex % (std)", ylab="kCal per g (std)")
+for ( i in 1:50 ) lines( xseq , mu[i,] , col=col.alpha("black",0.3) )
+```
+
+Better, now looking at posterior:
+
+```{r}
+ precis( m5.5 )
+```
+
+Some things to takeaway: niether strong nor precise, std twice mean.
+
+```{r}
+xseq <- seq( from=min(dcc$N)-0.15 , to=max(dcc$N)+0.15 , length.out=30 ) 
+mu <- link( m5.5 , data=list(N=xseq) )
+mu_mean <- apply(mu,2,mean)
+mu_PI <- apply(mu,2,PI)
+plot( K ~ N , data=dcc ,xlab="Neocortex % (std)", ylab="kCal per g (std)") 
+lines( xseq , mu_mean , lwd=2 ) 
+shade( mu_PI , xseq )
+```
+
+Also look at kCal v body mass independently
+
+```{r}
+m5.6 <- quap( 
+  alist(
+    K ~ dnorm( mu , sigma ) , 
+    mu <- a + bM*M ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bM ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+) , data=dcc ) 
+precis(m5.6)
+```
+
+
+```{r}
+xseq <- seq( from=min(dcc$M)-0.15 , to=max(dcc$M)+0.15 , length.out=30 ) 
+mu <- link( m5.6 , data=list(M=xseq) )
+mu_mean <- apply(mu,2,mean)
+mu_PI <- apply(mu,2,PI)
+plot( K ~ M , data=dcc ,xlab="log body mass (std)", ylab="kCal per g (std)") 
+lines( xseq , mu_mean , lwd=2 ) 
+shade( mu_PI , xseq )
+```
+
+
+Multivariate model:
+
+\begin{align*}
+  K_i &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i &= \alpha + \beta_N N_i + \\
+  \alpha &\sim \text{Normal}(0,0.2)\\
+  \beta_n &\sim \text{Normal}(0,0.5)\\
+  \beta_m &\sim \text{Normal}(0,0.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+```{r}
+m5.7 <- quap( 
+  alist(
+    K ~ dnorm( mu , sigma ) ,
+    mu <- a + bN*N + bM*M , 
+    a ~ dnorm( 0 , 0.2 ) , 
+    bN ~ dnorm( 0 , 0.5 ) , 
+    bM ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+) , data=dcc ) 
+precis(m5.7)
+```
+
+Posterior of both with the outcome increased.
+
+```{r} 
+plot( coeftab( m5.5 , m5.6 , m5.7 ) , pars=c("bM","bN") )
+```
+
+(Top is bM, bottom is bN)
+
+Mean for bM, the neocortex percent, increased by a factor of 5 (bottom), the mean for the log body mass is now much larger too. 
+
+```{r}
+pairs( ~K + M + N, dcc, col=col.alpha("blue",0.7))
+```
+
+We can see that M and N are positively correlated to each other, so they cancel out. Multiple regression is helpful - asking if a species has a high neocortex percent _for their body mass_; similarly if they have a high body mass _for their neocortex percent_.
+
+Three DAGs we'll explore:
+
+```{r, fig.height=2}
+dag1 <- dagitty( "dag {
+  M -> N
+  M -> K
+  N -> K
+}")
+coordinates(dag1) <- list( x=c(M=0,K=1,N=2) , y=c(M=0,K=1,N=0) ) 
+drawdag( dag1 )
+```
+
+Body mass influences neocortex percent, both influence calories
+
+```{r, fig.height=2}
+dag2 <- dagitty( "dag {
+  N -> M
+  M -> K
+  N -> K
+}")
+coordinates(dag2) <- list( x=c(M=0,K=1,N=2) , y=c(M=0,K=1,N=0) ) 
+drawdag( dag2 )
+```
+
+Neocortex percent influences body mass, both influence calories.
+
+```{r, fig.height=2}
+dag3 <- dagitty( "dag {
+  M <- U -> N
+  M -> K
+  N -> K
+}")
+coordinates(dag3) <- list( x=c(M=0,K=1,U=1,N=2) , y=c(M=0,K=1,U=0,N=0) ) 
+drawdag( dag3 )
+```
+
+
+Some unobserved variable $U$ influences both $M$ and $N$ - unobserved variables will be explored more in next chapter. 
+
+Can't tell which of the 3 is correct because the _conditional dependencies_ are the same between them; each suggests all variables are associated regardless of what we condition on - this is known as a "Markov Equivalence set."
+
+Last some counterfactual plots:
+
+```{r}
+# Plot 1
+xseq <- seq( from=min(dcc$M)-0.15 , to=max(dcc$M)+0.15 , length.out=30 ) 
+mu <- link( m5.7 , data=data.frame( M=xseq , N=0 ) )
+mu_mean <- apply(mu,2,mean)
+mu_PI <- apply(mu,2,PI)
+
+par(mfrow=c(1,2))
+plot( NULL , xlim=range(dcc$M) , ylim=range(dcc$K),
+      xlab="log body mass (std)", ylab="kCal per g (std)", main="Conterfactual N=0") 
+lines( xseq , mu_mean , lwd=2)
+shade( mu_PI , xseq )
+
+#plot2
+xseq <- seq( from=min(dcc$N)-0.15 , to=max(dcc$N)+0.15 , length.out=30 ) 
+mu <- link( m5.7 , data=data.frame( N=xseq , M=0 ) )
+mu_mean <- apply(mu,2,mean)
+mu_PI <- apply(mu,2,PI)
+
+plot( NULL , xlim=range(dcc$M) , ylim=range(dcc$K),
+            xlab="Neocortex % (std)", ylab="kCal per g (std)", main="Conterfactual M=0")
+lines( xseq , mu_mean , lwd=2 )
+shade( mu_PI , xseq )
+
+```
+
+
+Overthinking section - simulating DAGs
+
+```{r}
+# M -> K <- N
+# M -> N
+n <- 100
+M <- rnorm( n )
+N <- rnorm( n , M )
+K <- rnorm( n , N - M )
+d_sim <- data.frame(K=K,N=N,M=M)
+
+# M -> K <- N
+# N -> M
+n <- 100
+N <- rnorm( n )
+M <- rnorm( n , N )
+K <- rnorm( n , N-M )
+d_sim2 <- data.frame(K=K,N=N,M=M)
+
+# M -> K <- N
+# M <- U -> N
+n <- 100
+U <- rnorm( n )
+N <- rnorm( n , U )
+M <- rnorm( n , U )
+K <- rnorm( n , N-M)
+d_sim3 <- data.frame(K=K,N=N,M=M)
+```
+
+This code simulates data from all 3 dags into dataframes
+
+```{r}
+dag5.7 <- dagitty( "dag{ 
+  M -> K <- N
+  M -> N }" )
+coordinates(dag5.7) <- list( x=c(M=0,K=1,N=2) , y=c(M=0.5,K=1,N=0.5) ) 
+MElist <- equivalentDAGs(dag5.7)
+drawdag(MElist)
+```
+
+All possible Markov Equivalent dags.
+
+## 5.3 - Categorical Variables
 
 
 
