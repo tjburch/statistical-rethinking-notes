@@ -232,7 +232,7 @@ abline( a=0 , b=1 , lty=2 )
 for ( i in 1:nrow(d) ) lines( rep(d$D[i],2) , mu_PI[,i] , col=rangi2 )
 ```
 
-From this, understand that model under-predicts states with high divorce rates, and over-predicts those with low rates (89% CI shown). Several problematic ones, e.g. Idaho and Utah, high above the mean (high Latter Day Saints population with low divorce rate, cna consider demographic compositions).
+From this, understand that model under-predicts states with high divorce rates, and over-predicts those with low rates (89% CI shown). Several problematic ones, e.g. Idaho and Utah, high above the mean (high Latter Day Saints population with low divorce rate, can consider demographic compositions).
 
 
 3. Counterfactual plots - explore causal implications of manipulating variables
@@ -287,7 +287,7 @@ shade( apply(s$M,2,PI) , sim_dat$A )
 mtext( "Counterfactual effect of A -> M" )
 ```
 
-The trick: when you manipulate a variable, you break the causal influence of other vairables on it. For example, try breaking the causal chain from A->M.
+The trick: when you manipulate a variable, you break the causal influence of other variables on it. For example, try breaking the causal chain from A->M.
 
 ```{r, fig.height=2}
 dag_2 <- dagitty( "dag { A -> D <- M}")
@@ -322,7 +322,7 @@ d <- milk
 str(d)
 ```
 
-Hypothesis - larger brain -> more energgetic milk. Look at $K$, calories per g of milk, $M$, body mass, and $N$, neocortex mass percent of the brain.
+Hypothesis - larger brain -> more energetic milk. Look at $K$, calories per g of milk, $M$, body mass, and $N$, neocortex mass percent of the brain.
 
 ```{r}
 d$K <- scale( d$kcal.per.g ) 
@@ -383,7 +383,7 @@ Better, now looking at posterior:
  precis( m5.5 )
 ```
 
-Some things to takeaway: niether strong nor precise, std twice mean.
+Some things to takeaway: neither strong nor precise, std twice mean.
 
 ```{r}
 xseq <- seq( from=min(dcc$N)-0.15 , to=max(dcc$N)+0.15 , length.out=30 ) 
@@ -513,7 +513,7 @@ mu_PI <- apply(mu,2,PI)
 
 par(mfrow=c(1,2))
 plot( NULL , xlim=range(dcc$M) , ylim=range(dcc$K),
-      xlab="log body mass (std)", ylab="kCal per g (std)", main="Conterfactual N=0") 
+      xlab="log body mass (std)", ylab="kCal per g (std)", main="Counterfactual N=0") 
 lines( xseq , mu_mean , lwd=2)
 shade( mu_PI , xseq )
 
@@ -524,7 +524,7 @@ mu_mean <- apply(mu,2,mean)
 mu_PI <- apply(mu,2,PI)
 
 plot( NULL , xlim=range(dcc$M) , ylim=range(dcc$K),
-            xlab="Neocortex % (std)", ylab="kCal per g (std)", main="Conterfactual M=0")
+            xlab="Neocortex % (std)", ylab="kCal per g (std)", main="Counterfactual M=0")
 lines( xseq , mu_mean , lwd=2 )
 shade( mu_PI , xseq )
 
@@ -575,5 +575,122 @@ All possible Markov Equivalent dags.
 
 ## 5.3 - Categorical Variables
 
+Also known as _factors_, can be put into linear models.
+
+#### Binary categories
+
+Male/female example
+
+```{r}
+data(Howell1) 
+d <- Howell1 
+str(d)
+```
+
+"male" is an _indicator_ or dummy variable, indicates the category. Make a model focused on sex, where $m$ is male indicator.
 
 
+\begin{align*}
+  h_i &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i &= \alpha + \beta_m m_i \\
+  \alpha &\sim \text{Normal}(178,20)\\
+  \beta_m &\sim \text{Normal}(0,10)\\
+  \sigma &\sim \text{Uniform}(0,50)
+\end{align*}
+
+
+So for males you get a linear model, $\mu_i = \alpha + \beta_m m_i$ and for females you get just $\mu_i = \alpha$. This makes $\beta_m$ the expected difference between males and females; $\alpha$ no longer interpreted as average sample height but average female height.
+
+```{r}
+mu_female <- rnorm(1e4,178,20)
+mu_male <- rnorm(1e4,178,20) + rnorm(1e4,0,10) 
+#precis( data.frame( mu_female , mu_male ) )
+```
+
+Male prior wider than female, but we're not less certain, so use an index variable instead
+
+```{r}
+d$sex <- ifelse( d$male==1 , 2 , 1 ) 
+str( d$sex )
+```
+
+for 1 female, 2 male, making the model:
+
+\begin{align*}
+  h_i &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i &= \alpha_{\text{SEX}[i]}\\
+  \alpha_j &\sim \text{Normal}(178,20), \text{for } j=1..2\\
+  \sigma &\sim \text{Uniform}(0,50)
+\end{align*}
+
+
+Making the model:
+
+```{r}
+m5.8 <- quap( 
+  alist(
+    height ~ dnorm( mu , sigma ) , 
+    mu <- a[sex] ,
+    a[sex] ~ dnorm( 178 , 20 ) , 
+    sigma ~ dunif( 0 , 50 )
+  ) , data=d ) 
+precis( m5.8 , depth=2 ) #depth=2 -> show vectors
+```
+
+```{r}
+post <- extract.samples(m5.8)
+post$diff_fm <- post$a[,1] - post$a[,2] 
+#precis( post , depth=2)
+```
+
+precis output will have a diff_fm row - _contrast_.
+
+
+#### Many categories
+
+Going back to milk example:
+
+```{r}
+data(milk)
+d <- milk 
+unique(d$clade)
+```
+
+auto-index categories
+
+```{r}
+d$clade_id <- as.integer( d$clade)
+```
+
+Model:
+
+\begin{align*}
+  K_i &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i &= \alpha_{\text{CLADE}[i]}\\
+  \alpha_j &\sim \text{Normal}(0,0.5), \text{for } j=1..4\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+```{r}
+d$K <- scale( d$kcal.per.g ) 
+m5.9 <- quap(
+  alist(
+    K ~ dnorm( mu , sigma ),
+    mu <- a[clade_id],
+    a[clade_id] ~ dnorm( 0 , 0.5 ), 
+    sigma ~ dexp( 1 )
+  ) , data=d )
+labels <- paste( "a[" , 1:4 , "]:" , levels(d$clade) , sep="" )
+plot( precis( m5.9 , depth=2 , pars="a" ) , labels=labels ,
+    xlab="expected kcal (std)" )
+```
+
+Rethinking block - common error in interpretation of parameter estimates is that because a parameter is far from zero and another isn't (is/isn't significant) that the difference is significant. If you want to know the distribution of the difference, calculate the contrast between the two parameters, not investigate independently.
+
+
+## 5.4 - Summary 
+
+Multiple regression can construct models with more than one predictor - letting us answer the question "what is the value of knowing each predictor, once others are known."
+
+1. Focuses on value of predictors as a description, not a forecast only
+2. Assumption that value of predictors do not depend on values of other predictors (later confronted)
