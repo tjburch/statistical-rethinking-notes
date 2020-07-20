@@ -1,0 +1,360 @@
+# Chapter 6 - The Haunted DAG & The Causal Terror
+```{r, include=FALSE}
+library(rethinking)
+```
+
+Take two uncorrelated variables (newsworthiness and trustworthiness), select the top 10%, and draw a linear regression and there'll be a negative correlation - _Berkson's Paradox_ or _selection-distortion_ effect.
+
+This can happen within multiple regression, if adding a predictor induces selection, known as _collider bias_.
+
+In this chapter - warnings about adding random variables without an idea of a causal model: multicollinearity, post-treatment bias, collider bias.
+
+## 6.1 Multicollinearity
+
+"Very strong correlation between two or more predictor variables"
+
+Technically nothing wrong with it, will work well for prediction, just hard to understand.
+
+Return to primate milk data for data.
+
+
+### Multicollinear legs
+
+Using both leg lengths (left and right) as a predictor
+
+```{r}
+# Generate dataframe
+N <- 100
+set.seed(909)
+height <- rnorm(N,10,2) 
+leg_prop <- runif(N,0.4,0.5) 
+leg_left <- leg_prop*height +
+  rnorm( N , 0 , 0.02 ) 
+leg_right <- leg_prop*height +
+  rnorm( N , 0 , 0.02 )
+d <- data.frame(height,leg_left,leg_right)
+
+# Make model
+m6.1 <- quap(
+  alist(
+    height ~ dnorm( mu , sigma ) ,
+    mu <- a + bl*leg_left + br*leg_right , 
+    a ~ dnorm( 10 , 100 ) ,
+    bl ~ dnorm( 2 , 10 ) ,
+    br ~ dnorm( 2 , 10 ) ,
+    sigma ~ dexp( 1 )
+  ), data=d ) 
+precis(m6.1)
+```
+
+```{r}
+plot(precis(m6.1))
+```
+
+Gigantic means and standard deviations. Question posed in last chapter is "what's the value of knowing a second leg length after knoing the first?" 
+
+```{r}
+post <- extract.samples(m6.1)
+plot( bl ~ br , post , col=col.alpha(rangi2,0.1) , pch=16 )
+```
+
+Posterior for left vs right very highly correlated - as $\beta_l$ is large, $\beta_r$ is small, they carry the same variation.
+
+Our model development:
+
+\begin{align*}
+  y_i &\sim \text{Normal}(\mu,\sigma)\\
+  \mu_i &= \alpha + \beta_1 x_l + \beta_2 x_r\\
+\end{align*}
+
+But due to covariation (x is basically the samething), the computer basically sees:
+
+\begin{align*}
+  y_i &\sim \text{Normal}(\mu,\sigma)\\
+  \mu_i &= \alpha + (\beta_1 +\beta_2)  x_i\\
+\end{align*}
+
+As in only the sum of $\beta_1 + \beta_2$ influences $\mu$.
+
+```{r}
+sum_blbr <- post$bl + post$br
+dens( sum_blbr , col=rangi2 , lwd=2 , xlab="sum of bl and br" )
+```
+
+
+Using just one predictor:
+
+```{r}
+m6.2 <- quap( 
+  alist(
+    height ~ dnorm( mu , sigma ) ,
+    mu <- a + bl*leg_left,
+    a ~ dnorm( 10 , 100 ) ,
+    bl ~ dnorm( 2 , 10 ) ,
+    sigma ~ dexp( 1 ) 
+  ),
+  data=d ) 
+precis(m6.2)
+```
+
+Which is basically identical to the other model - when the two predictor variables are strongly carrelated, including both may lead to confusion.
+
+### Multicollinear milk
+
+Legs example is contrived, something more elaborate
+
+```{r}
+data(milk)
+d <- milk
+d$K <- scale( d$kcal.per.g ) 
+d$F <- scale( d$perc.fat ) 
+d$L <- scale( d$perc.lactose )
+```
+
+Looking at bivariate regressions:
+
+
+```{r}
+# kcal.per.g regressed on perc.fat 
+m6.3 <- quap(
+  alist(
+    K ~ dnorm( mu , sigma ) , 
+    mu <- a + bF*F ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bF ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+  ) , data=d )
+
+# kcal.per.g regressed on perc.lactose 
+m6.4 <- quap(
+  alist(
+    K ~ dnorm( mu , sigma ) ,
+    mu <- a + bL*L ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bL ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+  ) , data=d )
+
+m6.5 <- quap(
+  alist(
+    K ~ dnorm( mu , sigma ) , 
+    mu <- a + bF*F + bL*L , 
+    a ~ dnorm( 0 , 0.2 ) , 
+    bF ~ dnorm( 0 , 0.5 ) , 
+    bL ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+  ),data=d ) 
+
+precis( m6.3 ) 
+precis( m6.4 )
+precis( m6.5 )
+```
+
+
+
+Percent fat (perc.fat) and percent lactose (perc.lactose) are mirrors of each other (m6.3 and 6.4). Putting both in a model (6.5) gives posterior means of both closer to 0 than either individually - mutual information.
+
+```{r}
+pairs( ~ kcal.per.g + perc.fat + perc.lactose , data=d , col=rangi2 )
+```
+
+Very obvious from pairs plot, either helps, but neither does if you already know the other. Causal approach is the best approach.
+
+```{r, fig.height=2}
+dag0 <- dagitty( "dag {
+  L <- D -> F
+  L -> K
+  F -> K
+}")
+coordinates(dag0) <- list( x=c(L=0,D=1,K=1,F=2) , y=c(L=0,D=0,K=1,F=0) ) 
+drawdag( dag0 )
+```
+
+
+Central tradeoff is on $D$, the density of milk (nonobserved) - fat and lactose are from that (mediators). 
+
+_Non-Identifiability_ - structure of data and model do not make it possible to estimate a parameter's value. Can be coding, more often though just nature making it difficult.
+
+## 6.2 Post-treatment Bias
+
+_Omitted Variable Bias_ - Mistaken inferences that arise from omitting predictor variables
+
+_Post-treatment Bias_ - Mistaken inference that arise from including variables that are the consequences of others. 
+
+Name "post-treatment" stems from experimental design, adding variables to model that are a result of the experiment, not truly independent. E.g. plant growing experiment, outcome of interest is final height but some plants grow fungus during the experiment - should not include this.
+
+```{r}
+set.seed(71)
+# number of plants 
+N <- 100
+# simulate initial heights 
+h0 <- rnorm(N,10,2)
+# assign treatments and simulate fungus and growth 
+treatment <- rep( 0:1 , each=N/2 )
+fungus <- rbinom( N , size=1 , prob=0.5 - treatment*0.4 ) 
+h1 <- h0 + rnorm(N, 5 - 3*fungus)
+# compose a clean data frame
+d <- data.frame( h0=h0 , h1=h1 , treatment=treatment , fungus=fungus ) 
+#precis(d)
+```
+
+### A prior is born
+
+Best approach is to pretend you dont' have the data generating process.
+
+For this example, height at $t=1$ is height than that at $t=0$, so put parameters on a scale of _proportion_ of inital height - allows easier prior setting.
+
+\begin{align*}
+  h_{1,i} &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i &= h_{0,i} \times p \\
+\end{align*}
+
+So $p=2$ means at $t=1$ it doubles in height, $p=1$ means same height. Set this prior to 1, to allow for negative growth, force $p>0$ since a proportion - use Log-Normal since it's always positive.
+
+```{r}
+sim_p <- rlnorm( 1e4 , 0 , 0.25 ) 
+#precis( data.frame(sim_p) )
+```
+
+Covers everything from 40% shrinking to 50% growth, centered at 1.
+
+```{r}
+m6.6 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ), 
+    mu <- h0*p,
+    p ~ dlnorm( 0 , 0.25 ), 
+    sigma ~ dexp( 1 )
+), data=d ) 
+precis(m6.6)
+```
+On average, about 40% growth.
+
+Now the model we said would be bad before - adding fungus growth
+
+\begin{align*}
+  h_{1,i} &\sim \text{Normal}(\mu_i,\sigma)\\
+  \mu_i &= h_{0,i} \times p \\
+  p &= \alpha + \beta_T T_i + \beta_F F_i \\
+  \alpha &\sim \text{Log-Normal}(0,0.25)\\
+  \beta_T &\sim \text{Normal}(0,0.5)\\
+  \beta_F &\sim \text{Normal}(0,0.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+Sample model, prirors on slopes may be too flat (between -1 and +1), but otherwise proportion of growth defined.
+
+```{r}
+m6.7 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ),
+    mu <- h0 * p,
+    p <- a + bt*treatment + bf*fungus, 
+    a ~ dlnorm( 0 , 0.2 ) ,
+    bt ~ dnorm( 0 , 0.5 ),
+    bf ~ dnorm( 0 , 0.5 ),
+    sigma ~ dexp( 1 )
+  ), data=d ) 
+precis(m6.7)
+```
+
+Nearly same posterior. $\beta_T$  is 0, tight interval - not associated. $\beta_F$ is negative - hurts growth. What happened?
+
+### Blocked by consequence
+
+Fungus is a consequence of treatment - "post-treatment variable." Controlling for fungus, model answers the question: "Once we already know if a plant developed fungus, does soil treatment matter?" Which, no, it's 0. But we care about treatment.
+
+```{r}
+m6.8 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ),
+    mu <- h0 * p,
+    p <- a + bt*treatment,
+    a ~ dlnorm( 0 , 0.2 ), 
+    bt ~ dnorm( 0 , 0.5 ), 
+    sigma ~ dexp( 1 )
+  ), data=d ) 
+precis(m6.8)
+```
+
+Now the model is a lot more sensible 
+
+- Makes sense to control for pre-treatment effects (e.g. initial height) as they might mask causal influence
+- Post-treatment inclusion can mask the treatment itself
+
+### Fungus and _d_-separation
+
+Draw the DAG:
+
+```{r, fig.height=2}
+plant_dag <- dagitty( "dag {
+  H_0 -> H_1 
+  F -> H_1 
+  T -> F
+}")
+coordinates( plant_dag ) <- list( x=c(H_0=0,T=2,F=1.5,H_1=1) ,
+                                  y=c(H_0=0,T=0,F=0,H_1=0) )
+drawdag( plant_dag )
+```
+
+$T$ influences $F$ which influences $H_1$. By including $F$, you "block" $T$, or another way to say this is that conditioning onf $F$ induces _d-separation_ (d for directional). This means that some variables on a directed graph are independent of others, no path connecting them. Going back to _conditional independencies:_
+
+```{r}
+impliedConditionalIndependencies(plant_dag)
+```
+
+The last one is important - our outcome is independent of $T$, given conditioning on $F$.
+
+```{r, fig.height=2}
+moisture_dag <- dagitty( "dag {
+  H_0 -> H_1 
+  H_1 <- M -> F
+  F -> T
+}")
+coordinates( moisture_dag ) <- list( x=c(H_0=0,T=2,F=1.5,H_1=0.5,M=1) ,
+                                     y=c(H_0=0,T=0,F=0,H_1=0,M=0.5) )
+drawdag( moisture_dag )
+```
+
+Another DAG - Now, an onobserved moisture variable affects both height and fungus growth. In this case (with hypothetical plant unaffected by a fungus), $H1$ and $T$ will appear to be not associated, but then the conditioning on $F$ suddenly fools you into thinking there's an association.
+
+```{r}
+set.seed(71)
+N <- 1000
+h0 <- rnorm(N,10,2)
+treatment <- rep( 0:1 , each=N/2 )
+M <- rbern(N)
+fungus <- rbinom( N , size=1 , prob=0.5 - treatment*0.4 + 0.4*M )
+h1 <- h0 + rnorm( N , 5 + 3*M )
+d2 <- data.frame( h0=h0 , h1=h1 , treatment=treatment , fungus=fungus )
+
+m6.7_2 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ),
+    mu <- h0 * p,
+    p <- a + bt*treatment + bf*fungus, 
+    a ~ dlnorm( 0 , 0.2 ) ,
+    bt ~ dnorm( 0 , 0.5 ),
+    bf ~ dnorm( 0 , 0.5 ),
+    sigma ~ dexp( 1 )
+  ), data=d2 ) 
+precis(m6.7_2)
+
+m6.8_2 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ),
+    mu <- h0 * p,
+    p <- a + bt*treatment,
+    a ~ dlnorm( 0 , 0.2 ), 
+    bt ~ dnorm( 0 , 0.5 ), 
+    sigma ~ dexp( 1 )
+  ), data=d2 ) 
+precis(m6.8_2)
+```
+
+Next section fleshes this effect out more.
+
+## 6.3 Collider Bias
+
+
+
