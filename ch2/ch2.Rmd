@@ -80,10 +80,11 @@ Some schools of thought that emphasize choosing priors on personal belief, known
 
 Can summarize as the following:
 
-$$
-  W \sim \text{Binomial}(N,p)\\
-  p \sim \text{Uniform}(0,1)
-$$
+\begin{align*}
+ W &\sim \text{Binomial}(N,p)\\
+  p &\sim \text{Uniform}(0,1)
+\end{align*}
+
 
 Telling us $W$ is binomial, and $p$ is flat over the range 0 to 1.
 

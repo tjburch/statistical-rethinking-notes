@@ -140,7 +140,7 @@ simplehist( w , xlab="Water count" )
 
 Here, for each posterior sample, a random binomial dataset is created. Wide spread, but arises from the binomial process itself. Can consider other metrics, like the longest consecutive Water results (mode=3, obs=3) or number of switches between water/land (mode=4, obs=6).
 
-# 3.4 - Summary
+## 3.4 - Summary
 
 Given basic procedures for manipulating posterior distributions, can be used for intervals, point estimates, posterior predictive checks, simulations. Encapsulate uncertainty about parameters with uncertainty about outcomes.
 
