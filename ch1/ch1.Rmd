@@ -8,7 +8,7 @@
 
 Many have approach that the objective of inference is to test null hypotheses, but science isn't described by falsification standard.
 
-#### Hypotheses are not models 
+### Hypotheses are not models 
 - Models can correspond to multiple hypotheses, multiple hypotheses to a model
 - All models are false, so what does it mean to falsify a model?
 
@@ -25,14 +25,14 @@ How to get from statistical model back to process model? Derive a expected frequ
 
 So what to do? If you have multiple process models that all make similar predictions, then you search for a description where the processes look different. 
 
-#### Measurement matters 
+### Measurement matters 
 Logic of falsification is have hypothesis, look for observation. If not found, then hypothesis is false. If we formalize $H_0$ to "All swans are white", no number of observations can prove it, one observation disproves - powerful but prone to observation errors, and quantitative hypotheses have degrees of existence
 
 **Observation Error** - Doubted observations, measurement/instrumentation error
 
 **Continuous Hypotheses** - Not trying to disprove, but understand a distribution
 
-#### Falsification is consensual
+### Falsification is consensual
 
 Communities argue toward consensus about the meaning of evidence, can be messy
 
@@ -44,17 +44,17 @@ If falsification isn't the way, we can model. Models then can be made to testing
 - Graphical models
 
 
-#### Bayesian data analysis
+### Bayesian data analysis
 Takes question in form of a model and uses logic to produce an answer in the form of probability distributions. Literally just counting how the data may look according to our assumptions. Compare to frequentest, which is defined by the frequencies of events in large samples, based on imaginary data resampling.
 
 Bayesian approaches treat randomness as a property of information, not of the world.
 
-#### Model comparison and prediction
+### Model comparison and prediction
 If multiple models, how to choose? Cross validation and information criteria.
 
 Help in 3 ways: provide expectations of accuracy, give an estimate of overfitting, help spot influential observations
 
-#### Multilevel Models
+### Multilevel Models
 
 Parameters all the way down - parameters support inference. Multiple levels of uncertainty feed into the next, a multilevel (hierarchical, random effects, varying effects, mixed effects) model. Help us with overfitting, by exploiting partial pooling, which can be used to adjust estimates for repeat sampling, imbalance, variation, and to avoid averaging.
 
@@ -62,7 +62,7 @@ Diverse models turn out to be multilevel: models for missing data (imputation), 
 
 Fitting and interpreting multilevel models can be harder than traditional
 
-#### Graphical Causal Models 
+### Graphical Causal Models 
 
 Statistical models are association engines, detect (not infer!) association between cause and effect. Due to overfitting though, causally incorrect models can make better predictions than causally correct ones, can't focus on just prediction.
 

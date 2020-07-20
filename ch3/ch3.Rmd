@@ -65,7 +65,7 @@ library(rethinking)
 
 Can ask many questions using your posterior: How much lies below a parameter value, or between two parameter values? Which parameter value marks the lower X%? What range contains most the posterior probability? Which parameter values are most likely?
 
-#### Intervals of defined boundaries - 
+### Intervals of defined boundaries - 
 Address probability that proportion of water is less than 0.5. Directly from grid:
 ```{r}
   sum( posterior[ p_grid < 0.5 ] )
@@ -75,7 +75,7 @@ However, if not using grid, you can use samples and get a nearly identical resul
  sum( samples < 0.5 ) / 1e4
 ```
 
-#### Intervals of Defined Mass -
+### Intervals of Defined Mass -
 "Confidence intervals" commonly used, but we work with "credible interval" or "compatibility interval." To get the 80% "percentile interval" (PI):
 
 ```{r}
@@ -84,7 +84,7 @@ quantile( samples , c( 0.1 , 0.9 ) )
 
 ```PI``` function in rethinking package does this as well. Also ```HPDI``` is the "Highest posterior density interval," the narrowest interval containing specified probability mass. Generally this interval best represents parameter values consistent with the data. Note HPDI is more computationally intensive and suffers from variance on number of samples drawn.
 
-#### Point Estimates -
+### Point Estimates -
 Given the entire posterior, what number to report? Can do _maximum a posteriori_ (MAP) by taking the mode. Other point estimates (mean, median) can also work, but often worse in terms of loss function.
 
 
@@ -98,7 +98,7 @@ Useful for:
 4. Research design - simulate observations from hypothesis, can evaluate weather research design is effective, _power analysis_.
 5. Forecasting - simulate new predictions for the future
 
-#### Dummy data
+### Dummy data
 Bayesian models are always generative, capable of simulating predictions. For the globe example 
 ```{r}
 dbinom( 0:2 , size=2 , prob=0.7 )
@@ -122,7 +122,7 @@ dummy_w <- rbinom( trials , size=9 , prob=0.7 )
 simplehist( dummy_w , xlab="dummy water count" )
 ```
 
-#### Model Checking
+### Model Checking
 
 1. Ensure the fitting worked correctly
 2. Evaluate the adequacy of the model for a purpose

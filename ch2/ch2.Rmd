@@ -28,13 +28,13 @@ Design loop with 3 steps:
 
 Example in chapter - calculate the amount of water on earth by throwing globe up in the air, see if right thumb is on water or land.
 
-#### Data Story
+### Data Story
 
 May be _descriptive_, specifying associations to predict outcomes given observations; may be _causal_, a theory of how some events produce others. Generally causal stories are easily descriptive, descriptive stories may be hard to be causal. Can motivate by explaining how each piece of data is born. The value of the story is to more strongly define hypotheses and resolve ambiguities.
 
 Example: true proportion of water is $p$, single toss has $p$ chance of producing water $W$ and $1-p$ of land $L$, each toss is independent.
 
-#### Bayesian Updating
+### Bayesian Updating
 
 Model begins with one set of plausibilities assigned to each possibility. As data is collected, posteriors are produced.
 
@@ -42,18 +42,18 @@ Example: Give uniform prior. First case lands on water, $p=0$ is excluded, since
 
 One benefit of Bayesian approach is that estimates are valid for any sample size. Of course better with more data.
 
-#### Evaluate
+### Evaluate
 
 Because of differences between the model and real world, no guarantee of large world performance. Keep in mind two principles. Model's certainty is no guarantee the model is good - this is telling you that, given this model, plausible values are in some range. Second, it's important to supervise and critique the work - in the example, order of tosses shouldn't change final curve, but may indirectly affect it because data depends on order, so check on data it does not know about.
 
 
 ## 2.3 - Components of the Model
 
-#### Variables
+### Variables
 
 Symbols that can take different values - for globe example: target $p$ (proportion of water) cannot be observed. Unobserved are called "parameters." Other variables are count of water $W$ and count of land $L$, these are observed.
 
-#### Definitions 
+### Definitions 
 
 In defining, we build a model relating variables to one another. For each value of unobserved, need to define the number of ways/probability that the values of each observed could arise. For each unobserved also need a prior.
 
@@ -76,7 +76,7 @@ This gives the relative number of ways to get 6 water results for $p=0.5$ after 
 
 Some schools of thought that emphasize choosing priors on personal belief, known as "subjective Bayesian." If you don't have a strong argument for any prior, try different ones. 
 
-#### Model is born
+### Model is born
 
 Can summarize as the following:
 
@@ -91,7 +91,7 @@ Telling us $W$ is binomial, and $p$ is flat over the range 0 to 1.
 
 Once you have named all the variables, definitions, update prior to posterior - the relative plausibility of parameter values conditional on fdata and model, for our example $\text{Pr}(p|W,L)$.
 
-#### Bayes Theorem 
+### Bayes Theorem 
 
 Mathematical definition of posterior arises from Bayes. Joint probability $\text{Pr}(W,L,p) =\text{Pr}(W,L|p)\text{Pr}(p)$. The right side can also be reversed $\text{Pr}(p|W,L)\text{Pr}(W,L)$, which can be solved to 
 

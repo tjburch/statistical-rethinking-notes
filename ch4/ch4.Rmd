@@ -8,7 +8,7 @@ Ptolemy came up with an extremely accurate geocentric model of our solar system 
 
 ## 4.1 Why normal distributions are normal
 
-#### Normal by Addition
+### Normal by Addition
 
 Introduce from a random walk perspective:
 ```{r, fig.height=3}
@@ -18,7 +18,7 @@ dens(pos,  norm.comp=TRUE)
 
 Gaussian structure ultimately emerges - processes that add together random values result in Gaussians.
 
-#### Normal by Multiplication
+### Normal by Multiplication
 
 Consider an organism with growth rate influenced by local interactions; multiplicative effect. Sample growth rates between 1.0 and 1.1:
 
@@ -28,7 +28,7 @@ dens( growth , norm.comp=TRUE )
 ```
 
 
-#### Normal by log-multiplication
+### Normal by log-multiplication
 
 Large deviates multiplied don't produce Gaussians, but do produce Gaussians at log scale
 
@@ -40,7 +40,7 @@ dens(log.big, norm.comp=TRUE )
 
 This is because adding logs is the equivalent to multiplying original numbers.
 
-#### Using Gaussian Distributions
+### Using Gaussian Distributions
 
 Rest of chapter will be using Gaussians as a skeleton; 2 justifications
 
@@ -66,7 +66,7 @@ Then summarize the model, e.g.
 
 Immense flexibility with this - don't need to worry about conditions like homoscedasticity since in the model definition, natural ways to change assumptions so not stuck in fixed model type.
 
-#### Re-describing globe tossing
+### Re-describing globe tossing
 
 \begin{align*}
   W &\sim \text{Binomial}(N,p)\\
@@ -82,7 +82,7 @@ Both are stochastic, which is indicated by $\sim$, and implies not known with ce
 Building a linear regression model, consider all Gaussians, so posterior is a distribution of Gaussians distributions
 
 
-#### Data 
+### Data 
 
 1960s partial census data from foraging population of !Kung San
 
@@ -95,7 +95,7 @@ d2 <- d[ d$age >=18 , ] # Create new, just adult one
 ```
 
 
-#### The model 
+### The model 
 
 Adult heights from a single population are approximately normal, so model using Gaussian, but which one? Model is:
 
@@ -124,7 +124,7 @@ dens( prior_h )
 
 You could consider a less informative prior, e.g. $\mu \sim \text{Normal}(178,100)$, but this will give you odd things like negative heights, or people taller than the record tallest person - this is why these tests are useful.
 
-#### Grid approximation of posterior
+### Grid approximation of posterior
 
 Worth running posterior since first multi-parameter model and first Gaussian. Code given without explanation :)
 
@@ -168,7 +168,7 @@ dens( sample.sigma, main=expression(sigma) )
 
 Here we can see something has gone odd with the posterior $\mu$. Regardless, this is sampling of the _marginal_ posterior density, meaning averaging over other parameters.
 
-#### Finding the posterior with quap
+### Finding the posterior with quap
 
 Moving onto quadratic approximation (repeating some code for clarity).
 
@@ -196,7 +196,7 @@ precis( m4.1 , prob=0.95)
 
 This shows the marginal distribution of each parameter - 
 
-#### Sampling from a quap
+### Sampling from a quap
 
 When R constructs quadratic, it calculates covariances, which are sufficient to make Gaussians. Variance-covariance matrix given by:
 
@@ -225,7 +225,7 @@ Typically interested in how outcome is related to a _predictor variable_. Plot h
 plot( d2$height ~ d2$weight )
 ```
 
-#### Linear Model Strategy 
+### Linear Model Strategy 
 
 Strategy - make parameter for the mean of a Gaussian $\mu$ into a linear function of the predictor variable and other new parameters we invent. Instructs the analysis to assume that the predictor has a **constant** and **additive** relationship to the mean of the outcome.
 
@@ -298,7 +298,7 @@ for ( i in 1:N ) curve( a[i] + b[i]*(x - xbar) ,
 
 Much better constraints.
 
-#### Finding the posterior
+### Finding the posterior
 
 Let's define full model:
 
@@ -337,7 +337,7 @@ pairs(m4.3)
 ```
 Low covariation.
 
-#### Plotting posterior inference against the data 
+### Plotting posterior inference against the data 
 
 Always useful to plot posterior over data to check fit worked, and to interpret posterior.
 
@@ -349,7 +349,7 @@ b_map <- mean(post$b)
 curve( a_map + b_map*(x - xbar) , add=TRUE )
 ```
 
-#### Adding uncertainty around mean
+### Adding uncertainty around mean
 
 While that's the most plausible line, many others are possible, looking at these are good for communicating uncertainty.
 
@@ -380,7 +380,7 @@ for ( i in 1:50 )
 
 For 350 points, 50 possible lines.
 
-#### Plotting regression intervals and contours
+### Plotting regression intervals and contours
 
 For a single value (e.g. 50 kg), we can make a distribution
 
@@ -424,7 +424,7 @@ shade( mu.PI , weight.seq )
 ```
 
 
-#### Prediction Intervals
+### Prediction Intervals
 
 Important - we've only considered the range of $\mu$, not included $\sigma$. We can do that via the sim function, which simulates heights. Then we can plot all the distributions we've seen so far, the data, the MAP, the PI, and the HPDI.
 

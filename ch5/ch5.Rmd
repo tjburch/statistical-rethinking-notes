@@ -129,7 +129,7 @@ Answers the question "Is there any additional value in knowing a variable, once 
 
 Note - often this question is framed as "controlling for one variable while estimating another," but statistical control is different from experimental so a bit sloppy.
 
-#### Notation
+### Notation
 
 Strategy:
 
@@ -178,7 +178,7 @@ plot( coeftab(m5.1,m5.2,m5.3), par=c("bA","bM"))
 So there is little to no additional predictive power in knowing the rate of marriage in a state/no direct causal path from marriage rate to divorce rate. Meaning, model 2 is the better one.
 
 
-#### Plotting multivariate posteriors
+### Plotting multivariate posteriors
 
 **Predictor residual plots** - useful for understanding statistical model
 
@@ -425,7 +425,7 @@ Multivariate model:
 
 \begin{align*}
   K_i &\sim \text{Normal}(\mu_i,\sigma)\\
-  \mu_i &= \alpha + \beta_N N_i + \\
+  \mu_i &= \alpha + \beta_N N_i + \beta_M M_i\\
   \alpha &\sim \text{Normal}(0,0.2)\\
   \beta_n &\sim \text{Normal}(0,0.5)\\
   \beta_m &\sim \text{Normal}(0,0.5)\\
@@ -577,7 +577,7 @@ All possible Markov Equivalent dags.
 
 Also known as _factors_, can be put into linear models.
 
-#### Binary categories
+### Binary categories
 
 Male/female example
 
@@ -646,7 +646,7 @@ post$diff_fm <- post$a[,1] - post$a[,2]
 precis output will have a diff_fm row - _contrast_.
 
 
-#### Many categories
+### Many categories
 
 Going back to milk example:
 
