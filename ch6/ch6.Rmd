@@ -356,5 +356,145 @@ Next section fleshes this effect out more.
 
 ## 6.3 Collider Bias
 
+The initial claim in the chapter of negative correlation between newsworthinessa and trustworthiness resulting from selection process is a type of _collider bias_.
+
+```{r, fig.height=2}
+collider_dag <- dagitty( "dag {
+  T -> S <- N
+}")
+coordinates( collider_dag ) <- list( x=c(T=0,S=1,N=2) ,
+                                     y=c(T=0,S=0,N=0) )
+drawdag( collider_dag )
+```
+
+A "collider" is when 2 arrows enter, as in $S$ for that DAG. Conditioning on colliders have statistical, not causal, associations betweenamong causes - learning a proposal was selected for trustworthiness provides information about newsworthiness if you know a proposal was selected (if low $T$, high $N$).
+
+### Collider of false sorrow
+
+Turn to problem of happiness and age. Say happiness, $H$, is a fixed parameter at birth, but influences events - happier is more likely to get married $M$. Age, $A$, is also correlated to marriage (older = more likely), so get same collider dag:
+
+```{r, fig.height=2}
+collider_dag <- dagitty( "dag {
+  H -> M <- A
+}")
+coordinates( collider_dag ) <- list( x=c(T=0,S=1,N=2) ,
+                                     y=c(T=0,S=0,N=0) )
+drawdag( collider_dag )
+```
+
+Even though no causal assocaition between happiness and age, if conditioned on marriage, induces an association.
+
+```{r}
+library(rethinking)
+d <- sim_happiness( seed=1977 , N_years=1000 ) 
+#precis(d)
+```
+
+Simulation of that data: 1300 people from 0-65. Want to ask if age is related to happiness - try multiple regression with linear model:
+
+\begin{align*}
+  \mu_i = \alpha_{\text{MID}[i]} + \beta_A A_i
+\end{align*}
+
+MID here is marriage status, 1 is single and 2 is marriaed. Only want older than 18 years old, so correct it 0 to 1, 0 is 18 and 1 is 65. Happiness is arbitrary between -2 and 2.
+
+```{r}
+d2 <- d[ d$age>17 , ] # only adults 
+d2$A <- ( d2$age - 18 ) / ( 65 - 18 )
+
+d2$mid <- d2$married + 1 
+m6.9 <- quap(
+  alist(
+    happiness ~ dnorm( mu , sigma ), 
+    mu <- a[mid] + bA*A,
+    a[mid] ~ dnorm( 0 , 1 ),
+    bA ~ dnorm( 0 , 2 ),
+    sigma ~ dexp(1)
+  ) , data=d2 ) 
+precis(m6.9,depth=2)
+```
+
+This model says age is negatively associated with happiness - try ommitting marriage
+
+```{r}
+m6.10 <- quap( 
+  alist(
+    happiness ~ dnorm( mu , sigma ), 
+    mu <- a + bA*A,
+    a ~ dnorm( 0 , 1 ),
+    bA ~ dnorm( 0 , 2 ),
+    sigma ~ dexp(1) ) , 
+  data=d2 )
+precis(m6.10)
+```
+
+No association if marriage not included. Highlights selection bias - more people get married as time goes on, so mean among married people approaches population average of zero; inverse for unmarried, happier people migrate over to married population.
+
+
+### The haunted DAG
+
+Not always easy to see a collider because of unmeasured causes, which can still induce it. Example - infer influence of parents $P$ and grandparents $G$ on education of children $C$. Think a simple dag where $G$ influences $P$ which both influence $C$. But possibly there's an unobservable $U$ confounder that's not shared by grandparents - say a neighborhood effect after parents moved
+
+```{r, fig.height=2}
+parent_dag <- dagitty( "dag {
+  C <- G -> P
+  P -> C
+  P <- U -> C
+}")
+coordinates( parent_dag ) <- list( x=c(G=0,P=1,C=1,U=2) ,
+                                     y=c(G=0,P=0,C=1,U=0.5) )
+drawdag( parent_dag )
+```
+  
+  
+  If conditiditioned on $P$, bias inference on $G \rightarrow$ C$, even without measureing $U$. Example:
+  
+```{r}
+N <- 200 # number of grandparent-parent-child triads
+b_GP <- 1 # direct effect of G on P
+b_GC <- 0 # direct effect of G on C
+b_PC <- 1 # direct effect of P on C
+b_U<-2 #direct effect of U on P and C
+  
+set.seed(1)
+U <- 2*rbern( N , 0.5 ) - 1
+G <- rnorm( N )
+P <- rnorm( N , b_GP*G + b_U*U )
+C <- rnorm( N , b_PC*P + b_GC*G + b_U*U ) 
+d <- data.frame( C=C , P=P , G=G , U=U )
+```
+
+Set $G$ effect as 0 for effect, $U$ is binary. Try to measure grandparent influence now
+
+```{r}
+m6.11 <- quap( 
+  alist(
+    C ~ dnorm( mu , sigma ), 
+    mu <- a + b_PC*P + b_GC*G,
+    a ~ dnorm( 0 , 1 ), 
+    c(b_PC,b_GC) ~ dnorm( 0 , 1 ), 
+    sigma ~ dexp( 1 )
+  ), data=d ) 
+precis(m6.11)
+```
+    
+
+Grandparents have huge negative effect, parents have twice as large as it should be. Regression not wrong but causal interpretation is. If you make a plot of $C$ vs $G$, there's 2 sets, one for good neighborhoods $U=1$ and one for bad $U=-1$ - but selecting those of similar those with similar education causes a negative trend. Knowing $P$, learning $G$ invisibly tells us about the neighborhood - how to solve? Measure $U$.
+
+```{r}
+m6.12 <- quap( 
+  alist(
+    C ~ dnorm( mu , sigma ),
+    mu <- a + b_PC*P + b_GC*G + b_U*U, 
+    a ~ dnorm( 0 , 1 ), 
+    c(b_PC,b_GC,b_U) ~ dnorm( 0 , 1 ), 
+    sigma ~ dexp( 1 )
+  ), data=d ) 
+precis(m6.12)
+```
+
+Which matches the simulated data. This effet is _Simpson's Paradox_ - adding a predictor can reverse direction of association between another predictor and outcome.
+
+## 6.4  Confronting Confounding
 
 
