@@ -3,7 +3,7 @@
 library(rethinking)
 ```
 
-Take two uncorrelated variables (newsworthiness and trustworthiness), select the top 10%, and draw a linear regression and there'll be a negative correlation - _Berkson's Paradox_ or _selection-distortion_ effect.
+Take two uncorrelated variables (newsworthiness and trustworthiness), select the top 10%, and draw a linear regression and there will be be a negative correlation - _Berkson's Paradox_ or _selection-distortion_ effect.
 
 This can happen within multiple regression, if adding a predictor induces selection, known as _collider bias_.
 
@@ -51,7 +51,7 @@ precis(m6.1)
 plot(precis(m6.1))
 ```
 
-Gigantic means and standard deviations. Question posed in last chapter is "what's the value of knowing a second leg length after knoing the first?" 
+Gigantic means and standard deviations. Question posed in last chapter is "what's the value of knowing a second leg length after knowing the first?" 
 
 ```{r}
 post <- extract.samples(m6.1)
@@ -67,7 +67,7 @@ Our model development:
   \mu_i &= \alpha + \beta_1 x_l + \beta_2 x_r\\
 \end{align*}
 
-But due to covariation (x is basically the samething), the computer basically sees:
+But due to covariation (x is basically the same thing), the computer basically sees:
 
 \begin{align*}
   y_i &\sim \text{Normal}(\mu,\sigma)\\
@@ -97,7 +97,7 @@ m6.2 <- quap(
 precis(m6.2)
 ```
 
-Which is basically identical to the other model - when the two predictor variables are strongly carrelated, including both may lead to confusion.
+Which is basically identical to the other model - when the two predictor variables are strongly correlated, including both may lead to confusion.
 
 ### Multicollinear milk
 
@@ -162,6 +162,7 @@ Very obvious from pairs plot, either helps, but neither does if you already know
 
 ```{r, fig.height=2}
 dag0 <- dagitty( "dag {
+  D [unobserved]
   L <- D -> F
   L -> K
   F -> K
@@ -171,7 +172,7 @@ drawdag( dag0 )
 ```
 
 
-Central tradeoff is on $D$, the density of milk (nonobserved) - fat and lactose are from that (mediators). 
+Central trade-off is on $D$, the density of milk (non-observed) - fat and lactose are from that (mediators). 
 
 _Non-Identifiability_ - structure of data and model do not make it possible to estimate a parameter's value. Can be coding, more often though just nature making it difficult.
 
@@ -200,9 +201,9 @@ d <- data.frame( h0=h0 , h1=h1 , treatment=treatment , fungus=fungus )
 
 ### A prior is born
 
-Best approach is to pretend you dont' have the data generating process.
+Best approach is to pretend you don't have the data generating process.
 
-For this example, height at $t=1$ is height than that at $t=0$, so put parameters on a scale of _proportion_ of inital height - allows easier prior setting.
+For this example, height at $t=1$ is height than that at $t=0$, so put parameters on a scale of _proportion_ of initial height - allows easier prior setting.
 
 \begin{align*}
   h_{1,i} &\sim \text{Normal}(\mu_i,\sigma)\\
@@ -242,7 +243,7 @@ Now the model we said would be bad before - adding fungus growth
   \sigma &\sim \text{Exponential}(1)
 \end{align*}
 
-Sample model, prirors on slopes may be too flat (between -1 and +1), but otherwise proportion of growth defined.
+Sample model, priors on slopes may be too flat (between -1 and +1), but otherwise proportion of growth defined.
 
 ```{r}
 m6.7 <- quap( 
@@ -297,7 +298,7 @@ coordinates( plant_dag ) <- list( x=c(H_0=0,T=2,F=1.5,H_1=1) ,
 drawdag( plant_dag )
 ```
 
-$T$ influences $F$ which influences $H_1$. By including $F$, you "block" $T$, or another way to say this is that conditioning onf $F$ induces _d-separation_ (d for directional). This means that some variables on a directed graph are independent of others, no path connecting them. Going back to _conditional independencies:_
+$T$ influences $F$ which influences $H_1$. By including $F$, you "block" $T$, or another way to say this is that conditioning on $F$ induces _d-separation_ (d for directional). This means that some variables on a directed graph are independent of others, no path connecting them. Going back to _conditional independencies:_
 
 ```{r}
 impliedConditionalIndependencies(plant_dag)
@@ -307,6 +308,7 @@ The last one is important - our outcome is independent of $T$, given conditionin
 
 ```{r, fig.height=2}
 moisture_dag <- dagitty( "dag {
+  M [unobserved]
   H_0 -> H_1 
   H_1 <- M -> F
   F -> T
@@ -316,7 +318,7 @@ coordinates( moisture_dag ) <- list( x=c(H_0=0,T=2,F=1.5,H_1=0.5,M=1) ,
 drawdag( moisture_dag )
 ```
 
-Another DAG - Now, an onobserved moisture variable affects both height and fungus growth. In this case (with hypothetical plant unaffected by a fungus), $H1$ and $T$ will appear to be not associated, but then the conditioning on $F$ suddenly fools you into thinking there's an association.
+Another DAG - Now, an unobserved moisture variable affects both height and fungus growth. In this case (with hypothetical plant unaffected by a fungus), $H1$ and $T$ will appear to be not associated, but then the conditioning on $F$ suddenly fools you into thinking there's an association.
 
 ```{r}
 set.seed(71)
@@ -356,7 +358,7 @@ Next section fleshes this effect out more.
 
 ## 6.3 Collider Bias
 
-The initial claim in the chapter of negative correlation between newsworthinessa and trustworthiness resulting from selection process is a type of _collider bias_.
+The initial claim in the chapter of negative correlation between newsworthiness and trustworthiness resulting from selection process is a type of _collider bias_.
 
 ```{r, fig.height=2}
 collider_dag <- dagitty( "dag {
@@ -367,7 +369,7 @@ coordinates( collider_dag ) <- list( x=c(T=0,S=1,N=2) ,
 drawdag( collider_dag )
 ```
 
-A "collider" is when 2 arrows enter, as in $S$ for that DAG. Conditioning on colliders have statistical, not causal, associations betweenamong causes - learning a proposal was selected for trustworthiness provides information about newsworthiness if you know a proposal was selected (if low $T$, high $N$).
+A "collider" is when 2 arrows enter, as in $S$ for that DAG. Conditioning on colliders have statistical, not causal, associations between causes - learning a proposal was selected for trustworthiness provides information about newsworthiness if you know a proposal was selected (if low $T$, high $N$).
 
 ### Collider of false sorrow
 
@@ -382,7 +384,7 @@ coordinates( collider_dag ) <- list( x=c(T=0,S=1,N=2) ,
 drawdag( collider_dag )
 ```
 
-Even though no causal assocaition between happiness and age, if conditioned on marriage, induces an association.
+Even though no causal association between happiness and age, if conditioned on marriage, induces an association.
 
 ```{r}
 library(rethinking)
@@ -396,7 +398,7 @@ Simulation of that data: 1300 people from 0-65. Want to ask if age is related to
   \mu_i = \alpha_{\text{MID}[i]} + \beta_A A_i
 \end{align*}
 
-MID here is marriage status, 1 is single and 2 is marriaed. Only want older than 18 years old, so correct it 0 to 1, 0 is 18 and 1 is 65. Happiness is arbitrary between -2 and 2.
+MID here is marriage status, 1 is single and 2 is married. Only want older than 18 years old, so correct it 0 to 1, 0 is 18 and 1 is 65. Happiness is arbitrary between -2 and 2.
 
 ```{r}
 d2 <- d[ d$age>17 , ] # only adults 
@@ -414,7 +416,7 @@ m6.9 <- quap(
 precis(m6.9,depth=2)
 ```
 
-This model says age is negatively associated with happiness - try ommitting marriage
+This model says age is negatively associated with happiness - try omitting marriage
 
 ```{r}
 m6.10 <- quap( 
@@ -437,6 +439,7 @@ Not always easy to see a collider because of unmeasured causes, which can still 
 
 ```{r, fig.height=2}
 parent_dag <- dagitty( "dag {
+  U [unobserved]
   C <- G -> P
   P -> C
   P <- U -> C
@@ -447,7 +450,7 @@ drawdag( parent_dag )
 ```
   
   
-  If conditiditioned on $P$, bias inference on $G \rightarrow$ C$, even without measureing $U$. Example:
+  If conditioned on $P$, bias inference on $G \rightarrow$ C$, even without measureing $U$. Example:
   
 ```{r}
 N <- 200 # number of grandparent-parent-child triads
@@ -493,8 +496,139 @@ m6.12 <- quap(
 precis(m6.12)
 ```
 
-Which matches the simulated data. This effet is _Simpson's Paradox_ - adding a predictor can reverse direction of association between another predictor and outcome.
+Which matches the simulated data. This effect is _Simpson's Paradox_ - adding a predictor can reverse direction of association between another predictor and outcome.
 
 ## 6.4  Confronting Confounding
 
+Multiple regression can both help us deal with confounding, and cause it - controlling for the wrong variables ruins inference.
 
+**Confounding** - an outcome $Y$ and predictor $X$ are not the same as if we experimentally determined $X$. Example, educations $E$, wages $W$. Many unobserved variables that affect both.
+
+```{r, fig.height=2}
+wage_dag <- dagitty( "dag {
+  E <- U -> W
+  E -> W
+}")
+coordinates( wage_dag ) <- list( x=c(E=0,U=1,W=2) ,
+                                     y=c(E=1,U=0,W=1) )
+drawdag( wage_dag )
+```
+
+Regress $W$ on $E$, $U$ is a confounder, since there are 2 paths connecting $E$ and $W$. "Paths" in this sense ignore direction of arrows, but still create a statistical association, just not a _causal_ one. 
+
+How to isolate the causal path? **Experiment** - assign education levels at random, removes the influence of $U$ on $E$.
+
+```{r, fig.height=2}
+exp_dag <- dagitty( "dag {
+  U -> W
+  E -> W
+}")
+coordinates( exp_dag ) <- list( x=c(E=0,U=1,W=2) ,
+                                     y=c(E=1,U=0,W=1) )
+drawdag( exp_dag )
+```
+
+
+Other ways to do this though! Add $U$ to the model, condition on it. This _blocks_ the flow of information between $E$ and $W$ through $U$. Once you learn $U$, learning $E$ provides no additional information about $W$ - consider just $E \leftarrow U \rightarrow W$ in isolation.
+
+(this is important and I want to better understand, so taking verbose notes on it)
+
+Fleshing out - say $U$ is average wealth in a region. High wealth $U$ leads to more education $E$, leads to better jobs, leads to higher wages. Not knowing region, learning education $E$ gives information about wages $W$, since these are correlated. But after learning region, assuming no other path between $E$ and $W$, learning education tells you nothing about $W$ - blocking the path. Becomes a fork.
+
+### Shutting the backdoor
+
+Blocking paths in this sense is called "shutting the backdoor." Don't want spurious correlation sneaking in through non-causal paths - $E \leftarrow U \rightarrow W$ is a backdoor since it enters $E$ with an arrow and connects $E$ to $W$.
+
+Causal DAGs make it possible to say which we must control for to shut backdoor paths, also which _not_ to. 4 possible variable relations.
+
+1) $X \leftarrow Z \rightarrow Y$ known as the **Fork**. $Z$ is a common cause of $X$ and $Y$, causing correlation. Conditioning on $Z$, then learning $X$ tells us nothing about $Y$. $X$ and $Y$ are independent conditional on $Z$
+
+2) $X \rightarrow Z \rightarrow Y$ known as the **Pipe**. Seen in plant growth example - treatment$X$ influences fungus $Z$, which influences growth $Y$. Conditioning on $Z$ blocks the $X \rightarrow Y$ path.
+
+3) $X \rightarrow Z \leftarrow Y$ known as the **Collider**. Earlier in the chapter - no association between $X$ and $Y$ unless conditioning on $Z$, which would open the path.
+
+4) The **Descendant**, shown in the DAG below. A variable influenced by another, conditioning on it is a weaker form of conditioning on the variable itself - in the DAG, conditioning on $D$ will control $Z$, they share some information. This partially opens the path from $X$ to $Y$ since $Z$ is a collider. In the pipe $Z$ scenario, conditioning on the descendant is weakly closing the pipe.
+
+
+```{r, fig.height=2}
+descendent <- dagitty( "dag {
+  X -> Z
+  Y -> Z
+  Z -> D
+}")
+coordinates( descendent ) <- list( x=c(X=0,Z=1,D=1,Y=2) ,
+                                     y=c(X=1,Z=0,D=0.8,Y=1) )
+drawdag( descendent )
+```
+
+
+All DAGs are composed of these 4 relations. Here's the approach:
+
+1. List all paths connecting cause $X$ and outcome $Y$.
+2. Classify each as open or closed - open unless it contains a collider.
+3. Identify which have backdoor paths - those with an arrow entering $X$.
+4. Decide which variables to condition on to close backdoors.
+
+Examples to follow.
+
+### Two Roads
+
+```{r, fig.height=3}
+tworoads <- dagitty( "dag {
+  U [unobserved]
+  U <- A -> C
+  Y <- X <- U  -> B <- C -> Y
+}")
+coordinates( tworoads ) <- list( x=c(U=0,X=0,A=1,B=1,C=2,Y=2) ,
+                                     y=c(U=0.5,X=1.5,A=0,B=1,C=0.5,Y=1.5) )
+drawdag( tworoads )
+```
+
+
+Exposure of interest $X$, outcome of interest $Y$, unobservable $U$, 3 covariates $A$, $B$, $C$.
+
+Interested in bottom path from $X$ to $Y$, but two other paths - one through $U$, $A$, $C$ and one through $U$, $B$, $C$.
+
+Consider $A$ path, no colliders, so a backdoor - need to condition on it.
+
+$B$ path though has a collider, so need to not condition on it.
+
+```{r}
+adjustmentSets( tworoads , exposure="X" , outcome="Y" )
+```
+
+Daggity tool shows us options to condition on - in this case, $C$ is a better option since it helps with precision of $X \rightarrow Y$. $U$ would also work, but of course is unobserved.
+
+### Backdoor waffles
+
+Going back to waffle house example. want to find minimal set of covariates, and derive testable implications. Data cannot tell us DAG is right, but can tell us when wrong.
+
+```{r}
+waffle <- dagitty( "dag {
+  A -> D
+  A -> M -> D
+  A <- S -> M
+  S -> W -> D
+}")
+drawdag( waffle )
+```
+
+$S$ is southern, $M$ is marriage rate, $W$ is waffle houses, $D$ is divorce. Looking between $W$ and $D$, 3 paths - SMD, SAD, SAMD.
+
+```{r}
+adjustmentSets( waffle , exposure="W" , outcome="D" )
+```
+
+Can close all paths by conditioning on $S$ alone. This DAG assumes no unobserved confounds, unlikely for this sort of data. Looking at the testable implications, or _conditional independencies_
+
+```{r}
+impliedConditionalIndependencies(waffle)
+```
+
+- Median age of marriage is independent of waffle houses, conditioning on a state being in the south
+- Divorce rate is independent of being in the south, conditioning on age, marriage rate, and number of waffle houses
+- Marriage rate and waffle houses are independent, conditioning on being in the south
+
+## 6.5 Summary
+
+Multiple regression describes conditional associations, not causal influences. Common frustrations outlined - multicollinearity, post-treatment bias, collider bias. It is to reach causal valid causal inferences in the absence of experimentation.
