@@ -1,0 +1,56 @@
+## Chapter 5 problems
+
+```{r, include=FALSE}
+library(rethinking)
+```
+
+__5E1.__
+
+Which of the linear models below are multiple linear regressions?
+1. $\mu_i = \alpha + \beta x_i$
+2. $\mu_i = \beta_x x_i + \beta_z z_i$
+3. $\mu_i = \alpha + \beta_x (x_i - z_i)$
+4. $\mu_i = \alpha + \beta_x x_i + \beta_z z_i)$
+
+4 absolutely is. 2 basically is with an assumption of a 0 y-intercept. 3 is technically "linear" too - but doesn't match the formulation of this chapter, and the single slope for 2 predictors makes it not behave the way we'd like in our approach, so I won't consider it by-the-book a multiple regression.
+
+__5E2.__
+
+Write down a multiple regression to evaluate the claim: Animal diversity is linearly related to latitude, but only after controlling for plant diversity. You just need to write down the model definition.
+
+\begin{align*}
+  \mu_i &= \alpha + \beta_L L_i + \beta_P P_i\\
+\end{align*}
+
+For $P$ plant diversity, $L$ latitude, predicting animal diversity.
+
+__5E3.__
+
+Write down a multiple regression to evaluate the claim: Neither amount of funding nor size of laboratory is by itself a good predictor of time to PhD degree; but together these variables are both positively associated with time to degree. Write down the model definition and indicate which side of zero each slope parameter should be on.
+
+\begin{align*}
+  \mu_i &= \alpha + \beta_F F_I + \beta_S S_i\\
+\end{align*}
+
+For $F$ funding and and $S$ size. Both $\beta$ values will be positive.
+
+__5E4.__
+
+Suppose you have a single categorical predictor with 4 levels (unique values), labeled A, B, C and D. Let Ai be an indicator variable that is 1 where case i is in category A. Also suppose Bi, Ci, and Di for the other categories. Now which of the following linear models are inferentially equivalent ways to include the categorical variable in a regression? Models are inferentially equivalent when it’s possible to compute one posterior distribution from the posterior distribution of another model.
+
+1. $\mu_i = \alpha + \beta_A A_i + \beta_B B_i + \beta_D D_i$
+2. $\mu_i = \alpha + \beta_A A_i + \beta_B B_i + \beta_C C_i + \beta_D D_i $
+3. $\mu_i = \alpha + \beta_B B_i + \beta_C C_i + \beta_D D_i $
+4. $\mu_i = \alpha_A A_i + \alpha_B B_i + \alpha_C C_i + \alpha_D D_i $
+5. $\mu_i = \alpha_A ( 1 - B_i - C_i - D_i) + \alpha_B B_i + \alpha_C C_i + \alpha_D D_i $
+
+Models 1 and 3 both have slopes for 3 predictors and an intercept for the fourth; these are inferentially equivalent. Model 4 just has an intercept for all 4 predictors, so you could calculate the posterior from that - also equivalent. 5 also is ($\alpha_A$ is 0 when out-of-category, 1 when in). So - all solutions but number 2.
+
+__5M1.__
+
+Invent your own example of a spurious correlation. An outcome variable should be correlated with both predictor variables. But when both predictors are entered in the same model, the correlation between the outcome and one of the predictors should mostly vanish (or at least be greatly reduced).
+
+The classic ice cream and murders example - both more prevalent during the summer, so the predictor could be temperature.
+
+
+
