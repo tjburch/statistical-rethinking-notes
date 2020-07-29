@@ -1,0 +1,201 @@
+# Chapter 7 - Ulysses' Compass
+```{r, include=FALSE}
+library(rethinking)
+```
+
+Ockham's/Occam's Razor - Models with fewer assumptions are to be preferred. Not usually what we run into though - more often trade-off is accuracy vs simplicity. This chapter goes over tools for the trade-off.
+
+A couple major errors:
+
+_Overfitting_ - Learning too much from data, being over-constrained
+
+_Underfitting_ - Not learning enough, under-constrained.
+
+Also _confounding_ in prior chapters. In this chapter, will explore navigating these via _regularizing priors_ and _information criteria_ or _cross validation_.
+
+For information criteria, also will introduce _information theory_.
+
+## 7.1 - The Problem with Parameters
+
+Prior chapters showed adding variables can hurt causal models, but also problematic for just predictive ones too. 
+
+"Fit" in book means "how well the model can retrodict data used to fit the model
+
+$R^2$ is most common metric - "Variance explained"
+
+$$
+R^2 = \frac{\text{var}(\text{outcome}) - \text{var}(\text{residuals})}{\text{var}(\text{outcome})}  = 1- \frac{\text{var}(\text{residuals})}{\text{var}(\text{outcome})}
+$$
+
+Problem is that this will always increase as you add more parameters.
+
+### 7.1.1 More parameters will (almost) always improve fit
+
+Occurs when a model learns too much from a sample - both _regular_ and _irregular_ features in every sample. Regular features - targets of learning, generalize well. Irregular - aspects that do not generalize and mislead.
+
+Example - brian volumes and body masses (note, making a data frame from scratch so learning code here too)
+
+```{r}
+sppnames <- c( "afarensis","africanus","habilis","boisei", "rudolfensis","ergaster","sapiens")
+brainvolcc <- c( 438 , 452 , 612, 521, 752, 871, 1350 )
+masskg <- c( 37.0 , 35.5 , 34.5 , 41.5 , 55.5 , 61.0 , 53.5 )
+d <- data.frame( species=sppnames , brain=brainvolcc , mass=masskg )
+```
+
+First rescale variables, body mass to $\mu=0$ and $\sigma=1$. Brain size rescale so largest is 1 (don't standardize because negative brain doesn't exist).
+
+```{r}
+d$mass_std <- (d$mass - mean(d$mass))/sd(d$mass) 
+d$brain_std <- d$brain / max(d$brain)
+```
+
+Fit increasingly complex models to this to see effect of overly complex model. 
+
+Start simple linear, brain volume $b_i$ is linear of body mass $m_i$
+
+\begin{align*}
+  b_i &\sim \text{Normal}(\mu_i, \sigma)\\
+  \mu_i &= \alpha + \beta m_i\\
+  \alpha &\sim \text{Normal}(0.5,1)\\
+  \beta &\sim \text{Normal}(0,10)\\
+  \sigma &\sim \text{Log-Normal}(0,1)
+\end{align*}
+
+Ridiculously wide priors - body mass has 89% credible interval from -1 to 2, $\beta$ is flat and centered on zero.
+
+```{r}
+m7.1 <- quap( 
+  alist(
+    brain_std ~ dnorm( mu , exp(log_sigma) ), 
+    mu <- a + b*mass_std,
+    a ~ dnorm( 0.5 , 1 ),
+    b ~ dnorm( 0 , 10 ),
+    log_sigma ~ dnorm( 0 , 1 ) ), 
+  data=d )
+```
+
+Look at $R^2$, variance "explained" by the model - in other words, model retrodicts some proportion of total variation on outcome data, remaining is variation of residuals. Note, we're trying to argue against $R^2$ here. Compute posterior with sim.
+
+```{r}
+set.seed(12)
+R2_is_bad <- function( quap_fit ) {
+  s <- sim( quap_fit , refresh=0 ) 
+  r <- apply(s,2,mean) - d$brain_std 
+  1 - var2(r)/var2(d$brain_std)
+}
+```
+
+```{r}
+R2_is_bad(m7.1)
+```
+
+Five more models in increasnig complexity - just a polynomial of higher degree.
+
+Body to brain size is a parabola:
+
+\begin{align*}
+  b_i &\sim \text{Normal}(\mu_i, \sigma)\\
+  \mu_i &= \alpha + \beta m_i + \beta_2 m_i^2\\
+  \alpha &\sim \text{Normal}(0.5,1)\\
+  \beta_j &\sim \text{Normal}(0,10) \text{    for }j=1..2\\
+  \sigma &\sim \text{Log-Normal}(0,1)
+\end{align*}
+
+```{r}
+m7.2 <- quap( 
+  alist(
+    brain_std ~ dnorm( mu , exp(log_sigma) ), 
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2,
+    a ~ dnorm( 0.5 , 1 ),
+    b ~ dnorm( 0 , 10 ), 
+    log_sigma ~ dnorm( 0 , 1 )
+), data=d , start=list(b=rep(0,2)) )
+```
+
+Continue and make third, fourth, fifth degree models (code hidden from pdf, since it's the same thing over and over
+
+```{r}
+m7.3 <- quap( 
+  alist(
+    brain_std ~ dnorm( mu , exp(log_sigma) ), 
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2 +b[3]*mass_std^3, 
+    a ~ dnorm( 0.5 , 1 ),
+    b ~ dnorm( 0 , 10 ),
+    log_sigma ~ dnorm( 0 , 1 )
+  ), data=d , start=list(b=rep(0,3)) 
+)
+
+m7.4 <- quap( 
+  alist(
+      brain_std ~ dnorm( mu , exp(log_sigma) ), 
+      mu <- a + b[1]*mass_std + b[2]*mass_std^2 +b[3]*mass_std^3 + b[4]*mass_std^4, 
+      a ~ dnorm( 0.5 , 1 ),
+      b ~ dnorm( 0 , 10 ),
+      log_sigma ~ dnorm( 0 , 1 )
+    ), data=d , start=list(b=rep(0,4)) 
+)
+
+m7.5 <- quap( 
+  alist(
+    brain_std ~ dnorm( mu , exp(log_sigma) ),
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2 + b[3]*mass_std^3 + b[4]*mass_std^4 + b[5]*mass_std^5,
+    a ~ dnorm( 0.5 , 1 ),
+    b ~ dnorm( 0 , 10 ), 
+    log_sigma ~ dnorm( 0 , 1 )
+  ), data=d , start=list(b=rep(0,5)) 
+)
+```
+
+
+For the last model, sixth order, we have to replace std with 0.001 (will explain later)
+
+```{r}
+m7.6 <- quap( 
+  alist(
+    brain_std ~ dnorm( mu , 0.001 ),
+    mu <- a + b[1]*mass_std + b[2]*mass_std^2 + 
+              b[3]*mass_std^3 + b[4]*mass_std^4 +
+              b[5]*mass_std^5 + b[6]*mass_std^6, 
+    a ~ dnorm( 0.5 , 1 ),
+    b ~ dnorm( 0 , 10 )
+    ), data=d , start=list(b=rep(0,6))
+  )
+```
+
+Plotting:
+
+```{r}
+post <- extract.samples(m7.1)
+mass_seq <- seq( from=min(d$mass_std) , to=max(d$mass_std) , length.out=100 ) 
+l <- link( m7.1 , data=list( mass_std=mass_seq ) )
+mu <- apply( l , 2 , mean )
+ci <- apply( l , 2 , PI )
+plot( brain_std ~ mass_std , data=d )
+lines( mass_seq , mu )
+shade( ci , mass_seq )
+```
+
+```{r}
+post <- extract.samples(m7.6)
+mass_seq <- seq( from=min(d$mass_std) , to=max(d$mass_std) , length.out=100 ) 
+l <- link( m7.6 , data=list( mass_std=mass_seq ) )
+mu <- apply( l , 2 , mean )
+ci <- apply( l , 2 , PI )
+plot( brain_std ~ mass_std , data=d )
+lines( mass_seq , mu )
+shade( ci , mass_seq )
+```
+```{r}
+R2_is_bad(m7.6)
+```
+
+$R^2$ allegedly perfect! But that's because the degrees of freedom equal the number of data points. Clearly won't work for future cases.
+
+
+### 7.1.2 Too few parameters hurts, too
+
+Overfitting is accurate in-sample, but inaccurate out-of-sample. Underfitting is inaccurate both in and out of sample. One check is removing a data point - overfitting mean changes a lot, underfitting doesn't.
+
+Rethinking - Bias and Variance: Often under/overfitting is described as _bias-variance tradeoff_, where "bias" is underfitting, "variance" is overfitting.
+
+## 7.2 Entropy and Accuracy
