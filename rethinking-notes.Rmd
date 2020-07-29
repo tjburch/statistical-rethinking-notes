@@ -26,7 +26,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r child = 'ch5/ch5.Rmd'}
 ```
 \pagebreak
-
+```{r child = 'ch6/ch6.Rmd'}
+```
 
 # Problem sets
 ```{r child = 'ch2/ch2-problems.Rmd'}
