@@ -199,3 +199,60 @@ Overfitting is accurate in-sample, but inaccurate out-of-sample. Underfitting is
 Rethinking - Bias and Variance: Often under/overfitting is described as _bias-variance tradeoff_, where "bias" is underfitting, "variance" is overfitting.
 
 ## 7.2 Entropy and Accuracy
+
+### Firing the weatherperson
+
+Accuracy depends on target, no best target. To consider:
+
+1) Cost-benefit analysis. Both cost for incorrect, and gain for correct
+
+2) Accuracy in context
+
+Consider rain example - cost of not bringing an umbrella is much worse than bringing one and not using it.
+
+Another approach is a joint probability. If you use bayes to estimate the chance of getting 10 days right, the model based one has a higher chance (0.005%) over the one predicting it won't ever rain (0%), even if it has a higher hit rate. Joint probability is great because it's the likelihood in Bayes theorem.
+
+Called _log scoring rule_ sometimes, since typically the log of the joint probability is reported.
+
+### Information and uncertainty
+
+How to measure from perfect prediction? Distance to target, but if you add snow, then what? 
+
+Field of _information theory_ developed to address this.
+
+_Information_: Reduction in uncertainty when we learn the true outcome
+
+Weather example - each has a probability, want to turn to uncertainties. _Information Entropy_: for $n$ events, each event $i$ has probability $p_i$, then unique uncertainty is:
+
+$$
+H(p) = -E\log (p_i) = -\sum_{i=1}^{n} p_i \log (p_i)
+$$
+
+Or, "uncertainty contained in a probability distribution is the average log-probability of an event"
+
+Working example - true probabilities for rain and shine are $p_1=0.3$, $p_2=0.7$. $H(p) = -(p_1)\log(p_1)+ p_2\log(p_2)$
+
+```{r}
+p<- c(0.3, 0.7)
+-sum(p*log(p))
+```
+
+In a flip calculation, a place where it rains very little might be 0.01 and 0.99, making entropy 0.06. Much less uncertainty.
+
+### From entropy to accuracy 
+
+Entropy tells us how hard to hit the target. Now want to know how far a model is from the target
+
+Kullback-Leibler _Divergence_ - Additional uncertainty induced by using probabilities from one distribution to describe another.
+
+$$
+  D_{KL}(p,q) = \sum_i p_i (\log(p_i)-\log(q_i)) = \sum_i \log(\frac{p_i}{q_i})
+$$
+
+For using model assigning probabilities $q_i$ to an event with true probabilities $p_i$. _Divergence is the average difference in log probability between the target $p$ and the model $q$. This is the difference between two entropies - entropy of target $p$ and cross entropy of using $q$ to predict $p$.
+
+This can help contrast different approximations to $p$, candidate that minimizes divergence is closest to target.
+
+### Estimating Divergence
+
+
