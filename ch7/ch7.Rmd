@@ -255,4 +255,36 @@ This can help contrast different approximations to $p$, candidate that minimizes
 
 ### Estimating Divergence
 
+What if we don't know $p$ though? 
+
+Comparing two models ($q$ and $r$), this is easy to get out of - $p$ substracts out. We compare average log-probability from each model to get an estimate of relative distance from each to the target. In this, magnitudes are worthless, but difference is useful. For model $q$:
+
+$$
+S(q) = \sum_i \log(q_i)
+$$
+
+For a bayesian model, you must compute for the entire posterior though (parameters have distributions, ergo predictions do too). Find log of average probability for each observation; ```lppd``` function in ```rethinking``` does this:
+
+```{r}
+set.seed(1)
+lppd( m7.1 , n=1e4 )
+```
+
+Sum for log probability score, maximum is better. Multiply by -2 for _deviance_, smaller is better.
+
+### Scoring the right data
+
+Maintain same problem - always get better for increasingly complex models:
+
+```{r}
+set.seed(1)
+sapply( list(m7.1,m7.2,m7.3,m7.4,m7.5,m7.6) , function(m) sum(lppd(m)) )
+```
+
+What interests us is score on _new_ data, so do a _train-test split_.
+
+
+## 7.3 Golem Taming: Regularization
+
+
 
