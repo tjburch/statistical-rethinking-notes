@@ -33,7 +33,7 @@ Problem is that this will always increase as you add more parameters.
 
 Occurs when a model learns too much from a sample - both _regular_ and _irregular_ features in every sample. Regular features - targets of learning, generalize well. Irregular - aspects that do not generalize and mislead.
 
-Example - brian volumes and body masses (note, making a data frame from scratch so learning code here too)
+Example - brain volumes and body masses (note, making a data frame from scratch so learning code here too)
 
 ```{r}
 sppnames <- c( "afarensis","africanus","habilis","boisei", "rudolfensis","ergaster","sapiens")
@@ -89,7 +89,7 @@ R2_is_bad <- function( quap_fit ) {
 R2_is_bad(m7.1)
 ```
 
-Five more models in increasnig complexity - just a polynomial of higher degree.
+Five more models in increasing complexity - just a polynomial of higher degree.
 
 Body to brain size is a parabola:
 
@@ -210,7 +210,7 @@ Accuracy depends on target, no best target. To consider:
 
 Consider rain example - cost of not bringing an umbrella is much worse than bringing one and not using it.
 
-Another approach is a joint probability. If you use bayes to estimate the chance of getting 10 days right, the model based one has a higher chance (0.005%) over the one predicting it won't ever rain (0%), even if it has a higher hit rate. Joint probability is great because it's the likelihood in Bayes theorem.
+Another approach is a joint probability. If you use Bayes to estimate the chance of getting 10 days right, the model based one has a higher chance (0.005%) over the one predicting it won't ever rain (0%), even if it has a higher hit rate. Joint probability is great because it's the likelihood in Bayes theorem.
 
 Called _log scoring rule_ sometimes, since typically the log of the joint probability is reported.
 
@@ -257,13 +257,13 @@ This can help contrast different approximations to $p$, candidate that minimizes
 
 What if we don't know $p$ though? 
 
-Comparing two models ($q$ and $r$), this is easy to get out of - $p$ substracts out. We compare average log-probability from each model to get an estimate of relative distance from each to the target. In this, magnitudes are worthless, but difference is useful. For model $q$:
+Comparing two models ($q$ and $r$), this is easy to get out of - $p$ subtracts out. We compare average log-probability from each model to get an estimate of relative distance from each to the target. In this, magnitudes are worthless, but difference is useful. For model $q$:
 
 $$
 S(q) = \sum_i \log(q_i)
 $$
 
-For a bayesian model, you must compute for the entire posterior though (parameters have distributions, ergo predictions do too). Find log of average probability for each observation; ```lppd``` function in ```rethinking``` does this:
+For a Bayesian model, you must compute for the entire posterior though (parameters have distributions, ergo predictions do too). Find log of average probability for each observation; ```lppd``` function in ```rethinking``` does this:
 
 ```{r}
 set.seed(1)
@@ -286,5 +286,249 @@ What interests us is score on _new_ data, so do a _train-test split_.
 
 ## 7.3 Golem Taming: Regularization
 
+One way to make a model overtrain less is to use a skeptical prior, most commonly _regularizing prior_. Consider a standard Gaussian - prior on 
 
+\begin{align*}
+  y_i &\sim \text{Normal}(\mu_i, \sigma)\\
+  \mu_i &= \alpha + \beta x_i\\
+  \alpha &\sim \text{Normal}(0, 100)\\
+  \beta &\sim \text{Normal}(0,1)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+$\beta$ here says we should be skeptical of values above 2 and below -2 (contain 5% of plausibility). Can make it increasingly skeptical by narrowing. Careful though, can prevent learning from data if too tight.
+
+## 7.4 Predicting Predictive Accuracy
+
+### Cross-Validation
+
+Popular way to estimate predictive accuracy is to test on small parts of sample, known as _cross-validation_. Usually done in folding
+
+How many folds? Common to use maximum number, leave out one unique observation per fold: _Leave-One-Out Cross-Validation_ (LOOCV). 
+
+Great for small sets, but not so great for large. One option is to estimate the _importance_ of each sample, an unlikely observation is more important that a likely one. Often also called a _weight_. Method of cross validation is called _Pareto-Smoothed Importance Sampling Cross-Validation_ (PSIS). PSIS uses the _Pareto distribution_ to derive a cross-validation score without actually doing cross validation.
+
+Difference between points in training and testing deviance is about twice the number of model parameters; for OLS with flat priors this is the expectation. Used in _information criteria_, providing an estimate of out-of-sample deviance:
+
+$$
+\text{AIC} = D_{\text{train}} + 2p = -2\text{lppd}+2p
+$$
+Where AIC refers to the _Akaike Information Criterion_, and lppd is the log-posterior-predictive-density Mainly of historical interest, only reliable when priors are flat, posterior is Gaussian, and samples is much greater than number of parameters.
+
+_Deviance Information Criterion_ - okay with informative priors but maintains other two assumptions.
+
+_Widely Applicable Information Criterion_ - More general, no assumption on posterior shape.
+
+$$
+\text{WAIC}(y,\Theta) = -2(\text{lppd} - \sum_i \text{var}_{\theta}\log p(y_i|\theta) )
+$$
+
+The last term just being a penalty proportional to the variance -"compute variance in log-probabilities for each observation, then sum to get total penalty." Sometimes called _effective number of parameters_, $p_\text{WAIC}$ (historical, not accurate).
+
+Provides an approximate estimate of standard error for out-of-sample deviance, using central limit theorem.
+
+$$
+s_\text{WAIC} = \sqrt{N \text{var} - 2 (\text{lppd}_i - p_i)}
+$$
+
+Rethinking - Bayes Factors: _Bayesian Information Criterion_ commonly juxtaposed with AIC. BIC is related to log of the average likelihood. Tradition to take the ratio of likelihoods as a _Bayes  Factor_.
+
+### Comparing CV, PSIS, WAIC
+
+Do a simulation exercise, look at all three. For a low $N=20$, all are close, but miss by some amount. For $N=100$, all 3 become identical. 
+
+## 7.5 Model Comparison
+
+_Model selection_ - choosing model with lowest criterion and discarding others. Don't do this, it discards information about relative model accuracy contained in CV/PSIS/WAIC values. Also, predictive accuracy is not causation.
+
+Instead, _model comparison_ - using multiple models to understand how different variables influence predictions .
+
+### Model Mis-Selection
+
+Go back to models 6.6-6.8, looking at fungus. 6.6 has just the intercept, 6.7 has treatment and fungus (post-treatment), and 6.8 allows causal influence of treatment
+
+```{r, include=FALSE}
+set.seed(71) 
+# number of plants 
+N <- 100
+# simulate initial heights 
+h0 <- rnorm(N,10,2)
+# assign treatments and simulate fungus and growth 
+treatment <- rep( 0:1 , each=N/2 )
+fungus <- rbinom( N , size=1 , prob=0.5 - treatment*0.4 ) 
+h1 <- h0 + rnorm(N, 5 - 3*fungus)
+# compose a clean data frame
+d <- data.frame( h0=h0 , h1=h1 , treatment=treatment , fungus=fungus ) 
+
+m6.6 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ), 
+    mu <- h0*p,
+    p ~ dlnorm( 0 , 0.25 ), 
+    sigma ~ dexp( 1 )
+), data=d ) 
+precis(m6.6)
+
+m6.7 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ),
+    mu <- h0 * p,
+    p <- a + bt*treatment + bf*fungus, 
+    a ~ dlnorm( 0 , 0.2 ) ,
+    bt ~ dnorm( 0 , 0.5 ),
+    bf ~ dnorm( 0 , 0.5 ),
+    sigma ~ dexp( 1 )
+  ), data=d ) 
+precis(m6.7)
+
+m6.8 <- quap( 
+  alist(
+    h1 ~ dnorm( mu , sigma ),
+    mu <- h0 * p,
+    p <- a + bt*treatment,
+    a ~ dlnorm( 0 , 0.2 ), 
+    bt ~ dnorm( 0 , 0.5 ), 
+    sigma ~ dexp( 1 )
+  ), data=d ) 
+
+```
+
+```{r}
+set.seed(11) 
+WAIC( m6.7 )
+```
+
+WAIC is out-of-sample deviance, second is lppd, third is effective number of parameters, and fourth is standard error of WAIC.
+
+```{r}
+set.seed(77)
+compare( m6.6 , m6.7 , m6.8 )
+```
+
+pWAIC = penalty term, dWAIC is difference in WAIC to best, SE is standard error of each WAIC, dSE is standard error of their difference:
+```{r}
+set.seed(91)
+waic_m6.7 <- WAIC( m6.7 , pointwise=TRUE )$WAIC 
+waic_m6.8 <- WAIC( m6.8 , pointwise=TRUE )$WAIC 
+n <- length(waic_m6.7)
+diff_m6.7_m6.8 <- waic_m6.7 - waic_m6.8
+sqrt( n*var( diff_m6.7_m6.8 ) )
+```
+
+so difference between models is about 41, standard error is about 10.4.
+
+```{r}
+ plot( compare( m6.6 , m6.7 , m6.8 ) )
+```
+
+m6.7 looks the best - filled in points are in-sample, empty are out-of-sample. Lighter line is standard error of the difference in WAIC between models.
+
+WAIC tells us which model predicts better here, not which tells us the most about causation.
+
+WAIC also finds models 6.6 (intercept model) and 6.8 (treatment-only) similar.
+
+```{r}
+set.seed(92)
+waic_m6.6 <- WAIC( m6.6 , pointwise=TRUE )$WAIC 
+diff_m6.6_m6.8 <- waic_m6.6 - waic_m6.8
+sqrt( n*var( diff_m6.6_m6.8 ) )
+```
+
+Less than 5 standard error of the difference. Also, this is larger than the difference itself: cannot distinguish on WAIC.
+
+Last thing in the compare table is _weight_, how to summarize support for a model (sum to 1).
+
+$$
+w_i = \frac{\exp(-0.5 \Delta_i)}{\sum_j \exp (-0.5\Delta_j)}
+$$
+
+Quick way to see differences among models, also used in _model averaging_.
+
+### Outliers and other illusions
+
+Waffle house divorce rate example, had outliers, consider models from chapter 5:
+
+```{r}
+library(rethinking) 
+data(WaffleDivorce) 
+d <- WaffleDivorce 
+d$A <- standardize( d$MedianAgeMarriage )
+d$D <- standardize( d$Divorce )
+d$M <- standardize(d$Marriage )
+
+m5.1 <- quap( 
+  alist(
+    D ~ dnorm( mu , sigma ) , 
+    mu <- a + bA * A ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bA ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+) , data = d )
+
+m5.2 <- quap( 
+  alist(
+    D ~ dnorm( mu , sigma ) ,
+    mu <- a + bM * M ,
+    a ~ dnorm( 0 , 0.2 ) , 
+    bM ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+) , data = d )    
+
+m5.3 <- quap( 
+  alist(
+    D ~ dnorm( mu , sigma ) , 
+    mu <- a + bM*M + bA*A , 
+    a ~ dnorm( 0 , 0.2 ) , 
+    bM ~ dnorm( 0 , 0.5 ) , 
+    bA ~ dnorm( 0 , 0.5 ) , 
+    sigma ~ dexp( 1 )
+) , data = d )
+```
+
+Compare with PSIS:
+
+```{r}
+set.seed(24071847)
+compare( m5.1 , m5.2 , m5.3 , func=PSIS )
+```
+
+Model without marriage rate is best. Error messages shows PSIS isn't reliable
+```{r}
+set.seed(24071847)
+PSIS_m5.3 <- PSIS(m5.3,pointwise=TRUE)
+set.seed(24071847)
+WAIC_m5.3 <- WAIC(m5.3,pointwise=TRUE)
+plot( PSIS_m5.3$k , WAIC_m5.3$penalty , xlab="PSIS Pareto k" ,
+    ylab="WAIC penalty" , col=rangi2 , lwd=2 )
+```
+
+
+Idaho's high PSIS Pareto k value and WAIC penalty (effective number of parameters) is clear here. Pareto k value is double the theoretical point at which variance becomes infinite.
+
+What to do here? Gaussians have thin tails, but many natural phenomena don't.
+
+_Robust Regression_ - linear model where extreme observations are reduced. 
+
+A common kind is the _Student's T_ distribution, a mixture of Gaussian distributions with different variances - has a third parameter $\nu$, controlling tail thickness. For large datasets you can estimate $\nu$, but usually just assume it's small to reduce the influence of outliers.
+
+
+```{r}
+m5.3t <- quap( 
+  alist(
+    D ~ dstudent( 2 , mu , sigma ) , 
+    mu <- a + bM*M + bA*A ,
+    a ~ dnorm( 0 , 0.2 ) ,
+    bM ~ dnorm( 0 , 0.5 ) ,
+    bA ~ dnorm( 0 , 0.5 ) ,
+    sigma ~ dexp( 1 ) ) , 
+data = d )
+PSIS(m5.3t)
+```
+
+No warnings about k values now, using student distribution with $\nu=2$.
+
+## 7.6 Summary
+
+- Overfitting - too many parameters is bad
+- Regularizing priors and out-of-sample accuracy estimates like WAIC and PSIS to navigate
 
