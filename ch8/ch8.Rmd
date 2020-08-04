@@ -1,0 +1,62 @@
+# Chapter 8 - Conditional Manatees
+```{r, include=FALSE}
+library(rethinking)
+```
+
+Title explanation - manatees show damage from propeller blades they come in contact with, to avoid manatee deaths, you might consider propeller blade guards. Autopsies though show it's collisions with blunt sides of the boats that cause the deaths. Damage seen on living specimens _is conditional on survival_.
+
+_Conditioning_ - is knowing how something occurred. Posteriors are conditional on data. Model-based inference is conditional on the model. Linear models, for example, allow each outcome to be conditional on a set of predictors.
+
+_Interaction_ (also _moderation_) - a type of conditioning that allows parameters to be conditional on further aspects of data. Key to models beyond Gaussian outcomes and linear models.
+
+Models with complex interactions are easy to fit to data, but hard to understand.
+
+## 8.1 Building an interaction
+
+Example of Africa's log GDP vs terrain ruggedness - other nations have a negative relationship, Africa's is positive. One hypothesis is that rugged regions are protected against slave trades.
+
+```{r, fig.height=2}
+africa_dag <- dagitty( "dag {
+  U[unobserved]
+  R -> G <- C
+  R <- U -> G
+}")
+coordinates( africa_dag ) <- list( x=c(R=0, G=1, U=1, C=2) ,
+                                  y=c(R=0, G=0, U=1, C=0) )
+drawdag( africa_dag )
+```
+
+$R$ is ruggedness, $G$ is GDP, $C$ is continent, $U$ is unobserved confounds (e.g. distance to coasts). $R$ and $C$ both influence $G$, could be independent or could interact; DAG can only imply to us that $G=f(R,C)$.
+
+Want to build a model for $f(R,C)$. Could try splitting the dataframe into two, one for Africa and one not, but this is bad: some variables don't depend at all on continent, you can't get probability on the variable you used to split, you need all data to use information criteria, and there's advantages to borrowing information across categories.
+
+### Making a Rugged Model
+
+```{r}
+library(rethinking) 
+data(rugged)
+d <- rugged
+# make log version of outcome 
+d$log_gdp <- log( d$rgdppc_2000 )
+# extract countries with GDP data
+dd <- d[ complete.cases(d$rgdppc_2000) , ]
+# rescale variables
+dd$log_gdp_std <- dd$log_gdp / mean(dd$log_gdp) 
+dd$rugged_std <- dd$rugged / max(dd$rugged)
+```
+
+Usually - subtract mean and divided by standard deviations to make variable into z-score. Not done here
+
+- Ruggedness divided by maximum to make it a percentage, 0 is flat, 1 is the most rugged
+
+- log GDP is divided by the average, so a proportion of the international average: 1 is average, .8 is 80% of average
+
+\begin{align*}
+  log(y_i) &\sim \text{Normal}(\mu_i,\sigma)
+  \mu_i &= \alpha + \beta(r_i - \bar{r})
+\end{align}
+
+Here \bar{r} is the average ruggedness.
+
+
+
