@@ -56,7 +56,7 @@ Usually - subtract mean and divided by standard deviations to make variable into
   \mu_i &= \alpha + \beta(r_i - \bar{r})
 \end{align*}
 
-Here \bar{r} is the average ruggedness, 0.215 - most nations aren't so rugged.
+Here $\bar{r}$ is the average ruggedness, 0.215 - most nations aren't so rugged.
 
 Priors:
 
