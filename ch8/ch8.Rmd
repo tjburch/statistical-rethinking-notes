@@ -291,7 +291,7 @@ Main effects model:
 
 \begin{align*}
   B_i &\sim  \text{Normal}(\mu_i, \sigma)\\
-  \mu_i &= \alpha \beta_W(W_i - \bar{W}) + \beta_S(S_i-\bar{S})
+  \mu_i &= \alpha + \beta_W(W_i - \bar{W}) + \beta_S(S_i-\bar{S})
 \end{align*}
 
 Just linear regression subtracting means. $W$ is water, $S$ is shade. Blooms we scale 0-1 since it has large values on the raw scale, but want to keep 0 as a meaningful boundary.
@@ -342,7 +342,7 @@ m8.4 <- quap(
 
 \begin{align*}
   B_i &\sim  \text{Normal}(\mu_i, \sigma)\\
-  \mu_i &= \alpha \beta_W W_i + \beta_S S_i + \beta_{WS} W_i S_i
+  \mu_i &= \alpha + \beta_W W_i + \beta_S S_i + \beta_{WS} W_i S_i
 \end{align*}
 
 Last a prior for the interaction term is tough. Try setting $\beta_WS$ to have same std as $\beta_W$.
