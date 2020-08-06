@@ -1,0 +1,117 @@
+# Chapter 9 - Markov Chain Monte Carlo
+```{r, include=FALSE}
+library(rethinking)
+```
+
+_Markov Chain Monte Carlo (MCMC)_ is a stochastic process used to estimate the posterior.
+
+We will use _Stan_ a "a probabilistic programming language implementing statistical inference."
+
+_Rethinking_ package has bindings to Stan for now, book later will move to use the actual thing. I'll use the code [here](https://vincentarelbundock.github.io/rethinking2/09.html) to try to learn myself.
+
+## 9.1 - Good King Markov and His Island Kingdom
+
+_Metropolis Algorithm_ - Taught via example, King visiting islands in a circle
+
+1) Throw a coin, if heads consider clockwise, else consider counterclockwise as proposal.
+
+2) Count out population of the island and the current island. If there's more on the proposal island than the current, always go there. Else, mentally discount the proposal population from the current and use that in next week's calculation
+
+```{r}
+num_weeks <- 1e5
+positions <- rep(0,num_weeks)
+current <- 10
+for ( i in 1:num_weeks ) {
+  ## record current position
+    positions[i] <- current
+  ## flip coin to generate proposal
+    proposal <- current + sample( c(-1,1) , size=1 )
+  ## now make sure he loops around the archipelago
+    if ( proposal < 1 ) proposal <- 10
+    if ( proposal > 10 ) proposal <- 1
+  ## move?
+    prob_move <- proposal/current
+    current <- ifelse( runif(1) < prob_move , proposal , current )
+}
+plot( 1:100 , positions[1:100] , col="cornflowerblue")
+```
+
+He spends a lot of time on islands 8-10.
+
+```{r}
+plot( table( positions ) , col="cornflowerblue" )
+```
+
+## 9.2 - Metropolis Algorithms
+
+Previous section is a special case. "Islands" are parameter values (which can be continuous), "population sizes" are posterior probabilities, and "weeks" are samples taken from the joint posterior
+
+### Gibbs Sampling
+
+Metropolis algorithm works when a jump from A to B is equal to one from B to A, symmetric distribution. Metropolis-Hastings allows asymmetric options.
+
+This uses _Gibbs Sampling_, a variant that is more efficient through _adaptive proposals_, can get a good estimate of the posterior with fewer samples. Computes proposals from combinations of priors and likelihoods known as _conjugate pairs_, which have analytic solutions.
+
+Basis of popular software like Bayesian model fitting software like BUGS (Bayesian inference Using Gibbs Sampling) and JAGS (Just Another Gibbs Sampler).
+
+### High-dimensional Problems
+
+Some limitations:
+
+If you don't want to use conjugate priors, doesn't work.
+
+Metropolis and Gibbs are inefficient at large scales of parameters, they get stuck in small regions.
+
+Any Markov chain approach that samples individual parameters in individual steps is going to get stuck, due to the _concentration of measure_ - most of the probability mass of a high dimensional distribution is far from the mode. The combination of parameter values that maximizes posterior probability (the mode), is not actually in a region of parameter values that are highly plausible.
+
+```{r}
+D <- 1000
+T <- 1e3
+Y <- rmvnorm(T,rep(0,D),diag(D))
+rad_dist <- function( Y ) sqrt( sum(Y^2) )
+Rd <- sapply( 1:T , function(i) rad_dist( Y[i,] ) )
+dens( Rd )
+```
+
+Performed with 1000 dimensions, notice the x axis, radial distance of point from the mode.
+
+
+## 9.3 - Hamiltonian Monte Carlo
+
+_Hamiltonian (Hybrid) Monte Carlo_ (HMC) is more computationally costly than Metropolis or Gibbs but more efficient, needs fewer samples and thus less computer time in total, and it's what we'll use for the book.
+
+### Particles in Space
+
+Basic idea is to start a particle at a location with a randomized momenta, and simulate its path and continue to do this as your your landing, which reduces autocorrelation.
+
+When the log-posterior is flat, due to not much info in likelihood and flat priors, can glide for some time before stopping. Instead when concentrated, it stops quickly. There are light rejection criterion, observing things like conservation of energy, but acceptance rates are usually very good.
+
+An example 
+
+\begin{align*}
+  x_i &\sim \text{Normal(\mu_x,1)}\\
+  y_i &\sim \text{Normal(\mu_y,1)}\\
+  \mu_x &\sim \text{Normal(0,0.5)}\\
+  \mu_y &\sim \text{Normal(0,0.5)}\\
+\end{align*}
+
+HMC needs 2 functions and 2 settings. 
+
+- The first computes log-probability of the data and parameters, the top part of Bayes formula, and the "elevation" of a set of parameter values.
+
+- The _gradient_, slope in all directions at current position.
+
+Number of "Leapfrog steps" and "step size" parameters, usually given by computer. Example is plotted out, a 2D Gaussian, highlighting the _U-turn_ problem, where simulations turn around and return to same neighborhood, happens in parabolic paths - you'll have to tune steps in this case. 
+
+Stan deals with this by doing a _warm-up_ phase to figure out which step size is best (different from burn-in). Also leapfrog steps are set adaptively using "No U-turn Samplers" or _NUTS_
+
+### Limitations
+
+HMC requires continuous parameters, so things like imputing discrete data have to be done differently (ch 15-16). Also not magic, some posteriors are just tough, cause a _divergent transition_.
+
+
+## 9.4 - Easy HMC: ```ulam```
+
+
+
+
