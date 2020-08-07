@@ -1,0 +1,78 @@
+## Chapter 9 problems
+
+```{r, include=FALSE}
+library(rethinking)
+```
+
+__9E1.__
+
+>Which of the following is a requirement of the simple Metropolis algorithm?
+
+1. The parameters must be discrete
+2. The likelihood must be Gaussian
+3. The proposal distributino must be symmetric
+
+Only 3. Metropolis-Hastings generalizes for asymmetric distributions.
+
+__9E2.__
+
+>Gibbs sampling is more efficient than the Metropolis algorithm. How does it achieve this extra
+efficiency? Are there any limitations to the Gibbs sampling strategy?
+
+Gibbs uses conjugate pairs, which have analytical solutions, in order to have adaptive proposals for parameter values
+
+__9E3.__ 
+
+>Which sort of parameters can Hamiltonian Monte Carlo not handle? Can you explain why?
+
+Discrete parameters. Since it simulates particles traversing a plane, it cannot deal with discrete parameters.
+
+__9E4.__
+
+> Explain the difference between the effective number of samples, n_eff as calculated by Stan, and the actual number of samples.
+
+n_eff is a crude number of independent samples you get, which is fewer than the number thrown due to autocorrelation.
+
+__9E5.__
+
+>Which value should Rhat approach, when a chain is sampling the posterior distribution correctly?'
+
+Should approach 1 from above 1.
+
+__9E6.__
+
+>Sketch a good trace plot for a Markov chain, one that is effectively sampling from the posterior distribution. What is good about its shape? Then sketch a trace plot for a malfunctioning Markov chain. What about its shape indicates malfunction?
+
+A good one will be bounded and bounce around in a limited parameter space - "fuzzy caterpiller" I've seen described elsewhere. bad ones will jump to weird bad values.
+
+TODO: Medium
+
+__9H1.__
+
+>Run the model below and then inspect the posterior distribution and explain what it is accomplishing.
+
+```{r}
+mp <- map2stan( 
+  alist(
+    a ~ dnorm(0,1),
+    b ~ dcauchy(0,1) ),
+    data=list(y=1),
+    start=list(a=0,b=0),
+    iter=1e4, warmup=100 , WAIC=FALSE )
+```
+
+```{r}
+precis(mp)
+```
+
+```{r}
+samples <- extract.samples(mp)
+hist(samples$a)
+```
+
+```{r}
+hist(samples$b)
+```
+
+$a$ is nice and symmetric. $b$ has a huge standard deviation, it's got several large values.
+
