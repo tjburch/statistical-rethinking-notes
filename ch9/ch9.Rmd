@@ -65,7 +65,7 @@ Metropolis and Gibbs are inefficient at large scales of parameters, they get stu
 Any Markov chain approach that samples individual parameters in individual steps is going to get stuck, due to the _concentration of measure_ - most of the probability mass of a high dimensional distribution is far from the mode. The combination of parameter values that maximizes posterior probability (the mode), is not actually in a region of parameter values that are highly plausible.
 
 ```{r}
-D <- 1000
+D <- 10
 T <- 1e3
 Y <- rmvnorm(T,rep(0,D),diag(D))
 rad_dist <- function( Y ) sqrt( sum(Y^2) )
@@ -112,6 +112,280 @@ HMC requires continuous parameters, so things like imputing discrete data have t
 
 ## 9.4 - Easy HMC: ```ulam```
 
+```ulam``` is provided to compile lists into Stan HMC, but needs you to preprocesss transformations and have a clean data list with only variables you will use. It has the same helper functions, ```extract.samples```, ```extract.prior```, ```link```, ```sim```, etc.
+
+Revisiting ruggedness example - first the quap model:
+
+```{r}
+# Clean environment
+rm(list=ls())
+library(rethinking)
+data(rugged)
+d <- rugged
+d$log_gdp <- log(d$rgdppc_2000)
+dd <- d[ complete.cases(d$rgdppc_2000) , ]
+dd$log_gdp_std <- dd$log_gdp / mean(dd$log_gdp)
+dd$rugged_std <- dd$rugged / max(dd$rugged)
+dd$cid <- ifelse( dd$cont_africa==1 , 1 , 2 )
+
+m8.3 <- quap(
+    alist(
+        log_gdp_std ~ dnorm( mu , sigma ) ,
+        mu <- a[cid] + b[cid]*( rugged_std - 0.215 ) ,
+        a[cid] ~ dnorm( 1 , 0.1 ) ,
+        b[cid] ~ dnorm( 0 , 0.3 ) ,
+        sigma ~ dexp( 1 )
+    ) , data=dd )
+precis( m8.3 , depth=2 )
+```
+
+Now to do it with HMC:
+
+### Preparation
+
+Already preprocessed variables, now to get them to a clean df
+
+```{r}
+dat_slim <- list(
+    log_gdp_std = dd$log_gdp_std,
+    rugged_std = dd$rugged_std,
+    cid = as.integer( dd$cid )
+)
+str(dat_slim)
+```
+
+Better to use a list than a frame, since variables can have different lengths.
+
+### Sampling from
+
+```{r}
+# Clean up old models!
+rm(m8.3)
+m9.1 <- ulam(
+    alist(
+        log_gdp_std ~ dnorm( mu , sigma ) ,
+        mu <- a[cid] + b[cid]*( rugged_std - 0.215 ) ,
+        a[cid] ~ dnorm( 1 , 0.1 ) ,
+        b[cid] ~ dnorm( 0 , 0.3 ) ,
+        sigma ~ dexp( 1 )
+    ) , data=dat_slim , chains=1, cores = 4 )
+
+precis( m9.1 , depth=2 )
+```
+
+
+Equivalent Stan model:
+```
+stan_program <- '
+data {
+  int<lower=1> n;        // number of observations
+  vector[n] log_gdp_std; // outcome
+  vector[n] rugged_std;  // regressor
+  int region[n];            // africa indicator
+}
+parameters {
+  real<lower=0> sigma;
+  vector[2] a;
+  vector[2] b;
+}
+model {
+  vector[n] mu;
+  for (i in 1:n) {
+    mu[i] = a[region[i]] + b[region[i]] * (rugged_std[i] - 0.215);
+  }
+  a ~ normal(1, 0.1);
+  b ~ normal(0, 0.3);
+  sigma ~ exponential(1);
+  log_gdp_std ~ normal(mu, sigma);
+}
+'
+m9.1_stan <- stan(model_code = stan_program, data=stan_data)
+mcmc_trace(m9.1_stan)
+```
+
+```{r}
+m9.1
+```
+
+Similar results to the quadratic approximation. New columns n_eff and Rhat, help diagnose model - n_eff is an estimate of number of independent samples, Rhat is a estimate of convergence, should approach 1.00 from above.
+
+
+### Sampling again in parallel
+
+Using ulam with more computer cores
+
+```{r}
+m9.1 <- ulam(
+    alist(
+        log_gdp_std ~ dnorm( mu , sigma ) ,
+        mu <- a[cid] + b[cid]*( rugged_std - 0.215 ) ,
+        a[cid] ~ dnorm( 1 , 0.1 ) ,
+        b[cid] ~ dnorm( 0 , 0.3 ) ,
+        sigma ~ dexp( 1 )
+    ) , data=dat_slim , chains=2 , cores=4 )
+```
+```{r}
+show(m9.1)
+```
+
+
+2000 samples from all 4 chains
+
+```{r}
+precis( m9.1 , 2 )
+```
+
+More than 2000 effective samples, due to good sampler.
+
+### Visualization
+
+Pairs - bivariate plots for parameters
+```{r}
+#pairs( m9.1 ) # this kills my R session, so we'll not do it.
+```
+
+### Checking the chain
+
+Sometimes problems can happen in converging, check trace plot, should be fuzzy, meaning probing a good mix of values. Also stationary, in the same region for the duration.
+
+```{r}
+traceplot(m9.1)
+```
+
+Also try trace rank plots:
+
+```{r}
+ trankplot( m9.1 , n_cols=2 )
+```
+
+Chains should be close, here we see they are, which is good
+
+## 9.5 - Care and feeding of your Markov Chain
+
+HMC makes it easy to tell when things go wrong, it complains loudly when things aren't right.
+
+### How many samples do you need?
+
+```iter``` and ```warmup``` control this, default is 1000 for ```iter``` and ```iter/2``` for ```warmup```.
+
+What matters is _effective_ number of samples, not the raw. If all you want is mean, it won't take many, a few hundred will be fine. If you want extreme tails of the posterior, beyond the 99th percentile, you'll need more.
+
+### How many chains?
+
+Very uncommon to run more than one when estimating a single model.
+
+**When debugging, use only 1** - some errors only show up when you do one.
+
+Once you've verified, say you need 1000 warmups and 9000 real in total - do you do one with 1000/10000, or 3 with 1000/4000? Doesn't really matter, but 3 chains duplicate warmup effect, which is slow; but on different cores it might run faster overall faster.
+
+Typical motto: _one to debug, 4 for verification and inference_.
+
+### Taming a wild chain
+
+If using lots of flat priors, many flat areas of space for the chain to go, an example:
+
+```{r}
+y <- c(-1,1)
+set.seed(11)
+m9.2 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- alpha ,
+        alpha ~ dnorm( 0 , 1000 ) ,
+        sigma ~ dexp( 0.0001 )
+    ) , data=list(y=y) , chains=3 )
+
+precis( m9.2 )
+```
+
+
+Mean of -1 and 1 is 0, but we got... not that. Warning message says "divergent transitions," many cases increasing ```adapt_delta``` will remove divergent transitions.
+
+```{r}
+pairs( m9.2@stanfit )
+```
+
+Divergent transitions are in red.
+
+```{r}
+traceplot(m9.2)
+```
+
+```{r}
+trankplot(m9.2)
+```
+
+Also yikes! Weird estimates in trace plot, and trankplot spend long times away from each other, poor exploration of posterior.
+
+Weakly informative priors are much better though
+
+```{R}
+set.seed(11)
+m9.3 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- alpha ,
+        alpha ~ dnorm( 1 , 10 ) ,
+        sigma ~ dexp( 1 )
+    ) , data=list(y=y) , chains=3 )
+precis( m9.3 )
+```
+
+Much better mean! No divergent transitions notes either - weakly informative priors give gentle nudge, values like 30 million aren't as likely as 1 or 2.
+
+### Non-identifiable priors
+
+Back to ch 5, highly corrrelated predictors can create non-identifiable parameters - we reproduce to know what's going on when encountered later.
+
+```{r}
+set.seed(41)
+y <- rnorm( 100 , mean=0 , sd=1 )
+```
+
+We'll fit model with 
+
+\begin{align*}
+y_i = \text{Normal(\mu,\sigma)}
+\mu =\alpha_1 + \alpha_2
+\end{align*}
+
+with wide priors
+
+```{r}
+# This model will take a while to fit
+set.seed(384)
+m9.4 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- a1 + a2 ,
+        a1 ~ dnorm( 0 , 1000 ),
+        a2 ~ dnorm( 0 , 1000 ),
+        sigma ~ dexp( 1 )
+    ) , data=list(y=y) , chains=3 )
+precis( m9.4 )
+```
+
+Note bad ```n_eff``` and ```Rhat``` values. Means are on the opposite sides of zero with huge standard deviations - all a result of the fact that you can only estimate their sum. Error is "X transitions after warmup that exceed maximum treedepth."
+
+Can be fixed with weakly regularizing priors again:
+
+```{r}
+m9.5 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- a1 + a2 ,
+        a1 ~ dnorm( 0 , 10 ),
+        a2 ~ dnorm( 0 , 10 ),
+        sigma ~ dexp( 1 )
+    ) , data=list(y=y) , chains=3 )
+precis( m9.5 )
+```
+
+Sampled faster, sum is identified. Gelman's _Folk Theorem of Statistical Computing_ - when you're having trouble fitting a model, it usually means a bad model.
+
+## 9.6 - Summary
+
+Dense chapter that taught about MCMC, with several algorithms: Metropolis, Gibbs, HMC. This book uses ```ulam``` which runs Stan under the hood.
 
 
 
