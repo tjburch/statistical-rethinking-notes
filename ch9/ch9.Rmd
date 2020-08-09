@@ -335,7 +335,7 @@ Much better mean! No divergent transitions notes either - weakly informative pri
 
 ### Non-identifiable priors
 
-Back to ch 5, highly corrrelated predictors can create non-identifiable parameters - we reproduce to know what's going on when encountered later.
+Back to ch 5, highly correlated predictors can create non-identifiable parameters - we reproduce to know what's going on when encountered later.
 
 ```{r}
 set.seed(41)
