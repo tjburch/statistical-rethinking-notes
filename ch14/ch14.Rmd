@@ -144,27 +144,47 @@ dens( R[,1,2])
 
 Compared $\eta=1$ (flat) to $\eta=3$.
 
-Now we'll fit the model:
+Now we'll fit the model - Stan code:
 
-```{r, stan-model}
-set.seed(867530)
-m14.1 <- ulam(
-    alist(
-        wait ~ normal( mu , sigma ),
-        mu <- a_cafe[cafe] + b_cafe[cafe]*afternoon,
-        c(a_cafe,b_cafe)[cafe] ~ multi_normal( c(a,b) , Rho , sigma_cafe ),
-        a ~ normal(5,2),
-        b ~ normal(-1,0.5),
-        sigma_cafe ~ exponential(1),
-        sigma ~ exponential(1),
-        Rho ~ lkj_corr(2)
-    ) , data=d , chains=2 , cores=1)
 ```
+try01 <- as.character("
+data{
+  vector[200] wait;
+  int afternoon[200];
+  int cafe[200];
+}
+parameters{
+  vector[20] b_cafe;
+  vector[20] a_cafe;
+  real a;
+  real b;
+  vector<lower=0>[2] sigma_cafe;
+  real<lower=0> sigma;
+  corr_matrix[2] Rho;
+}
+model{
+  vector[200] mu;
+  Rho ~ lkj_corr( 2 );
+  sigma ~ exponential( 1 );
+  sigma_cafe ~ exponential( 1 );
+  b ~ normal( -1 , 0.5 );
+  a ~ normal( 5 , 2 );
+  {
+    vector[2] YY[20];
+    vector[2] MU;
+    MU = [ a , b ]';
+    for ( j in 1:20 ) YY[j] = [ a_cafe[j] , b_cafe[j] ]';
+    YY ~ multi_normal( MU , quad_form_diag(Rho , sigma_cafe) );
+  }
+  for ( i in 1:200 ) {
+    mu[i] = a_cafe[cafe[i]] + b_cafe[cafe[i]] * afternoon[i];
+  }
+  wait ~ normal( mu , sigma );
+}
+")
 
-Stan code for the model:
 
-```{r}
-stancode(m14.1)
+m14.1 <- stan( model_code = try01, data=d, chains=2)
 ```
 
 
@@ -202,3 +222,152 @@ for ( i in 1:N_cafes ) lines( c(a1[i],a2[i]) , c(b1[i],b2[i]) )
 
 
 
+
+
+
+## 14.5 - Continuous Categories and the Gaussian Process
+
+Apply the idea of varying effects to continuous variables, called _Gaussian process Regression_.
+
+### Spatial autocorrelation in Oceanic Tools
+
+Ch 11 oceanic tool kit complexity example - previously used a crude binary contact predictor, but has some faults
+
+- Takes no note of _which_ societies each had contact with
+
+- If tools are exchanged, total number is not truly independent, even if conditioning on all predictors
+
+- Closer islands may share unmeasured geographic features, so space could matter in several ways
+
+Define a distrance matrix among societies, then estimate similarity.
+
+In code, create a symmetric matrix of distances between place A and B.
+
+Model starts from Poisson probability:
+
+\begin{align*}
+  T_i &\sim \text{Poisson}(\lambda_i)\\
+  \lambda_i &= \alpha P_i^\beta /\gamma
+\end{align*}
+
+Now, want to make varying intercepts multiplicative:
+
+\begin{align*}
+  T_i &\sim \text{Poisson}(\lambda_i)\\
+  \lambda_i &= \exp (k_\text{SOCIETY}[I]) \alpha P_i^\beta /\gamma
+\end{align*}
+
+The heart of the Gaussian process is the prior:
+
+\begin{align*}
+\begin{pmatrix} k_1\\k_2\\k_3\\...\\k_{10} \end{pmatrix} &\sim \text{MVNormal}
+\begin{pmatrix} 
+  \begin{pmatrix} 
+    0\\0\\0\\...\\0
+  \end{pmatrix}
+  , \mathbf{K}
+\end{pmatrix}\\
+
+\mathbf{K}_ij &=\eta^2 \exp(-\rho^2 D_{ij}^2) +\delta_{ij} \sigma^2
+\end{align*}
+
+First line is a 10-d Gaussian prior, one dimension for each society. Covariance is second line, for any pair of societies, $ij$. Walking through it:
+
+Shape comes from $\exp(-\rho^2 D_{ij}^2)$  - covariance declines exponentially with squared distance between them - $\rho$ is rate of decline.
+
+![](plots/fig14_10.png)
+
+Dashed line is linear distance function, solid is squared.
+
+$\eta^2$ is maximum covariance between any societies $i$ and $j$, and the $\delta_{ij} \sigma^2$ provides for extra covariance when $i=j$ (Kronecker delta).
+
+Full model:
+
+\begin{align*}
+  T_i &\sim \text{Poisson}(\lambda_i)\\
+  \lambda_i &= \exp (k_\text{SOCIETY}[I]) \alpha P_i^\beta /\gamma \\
+  \mathbf{k} &\sim \text{MVNormal}((0,\dots, 0), \mathbf{K}\\
+  \mathbf{K}_ij &=\eta^2 \exp(-\rho^2 D_{ij}^2) +\delta_{ij}(0.01)\\
+  \alpha &\sim \text{Exponential}(1)\\
+  \beta &\sim \text{Exponential}(1)\\
+  \eta^2 &\sim \text{Exponential}(2)\\
+  \rho^2 &\sim \text{Exponential}(0.5)\\
+\end{align*}
+
+(note $\rho^2$ and $\eta^2$ must be positive, so exponential)
+
+```
+data(Kline2) # load the ordinary data, now with coordinates
+d <- Kline2
+d$society <- 1:10 # index observations
+
+dat_list <- list(
+  T = d$total_tools,
+  P = d$population,
+  society = d$society,
+  Dmat=islandsDistMatrix )
+
+m14.8 <- ulam(
+  alist(
+    T ~ dpois(lambda),
+    lambda <- (a*P^b/g)*exp(k[society]),
+    vector[10]:k ~ multi_normal( 0 , SIGMA ),
+    matrix[10,10]:SIGMA <- cov_GPL2( Dmat , etasq , rhosq , 0.01 ),
+    c(a,b,g) ~ dexp( 1 ),
+    etasq ~ dexp( 2 ),
+    rhosq ~ dexp( 0.5 )
+  ), data=dat_list , chains=4 , cores=4 , iter=2000 )
+```
+
+Or raw stan:
+
+```
+functions{
+
+
+    matrix cov_GPL2(matrix x, real sq_alpha, real sq_rho, real delta) {
+        int N = dims(x)[1];
+        matrix[N, N] K;
+        for (i in 1:(N-1)) {
+          K[i, i] = sq_alpha + delta;
+          for (j in (i + 1):N) {
+            K[i, j] = sq_alpha * exp(-sq_rho * square(x[i,j]) );
+            K[j, i] = K[i, j];
+          }
+        }
+        K[N, N] = sq_alpha + delta;
+        return K;
+    }
+}
+data{
+    int T[10];
+    int society[10];
+    int P[10];
+    matrix[10,10] Dmat;
+}
+parameters{
+    vector[10] k;
+    real<lower=0> g;
+    real<lower=0> b;
+    real<lower=0> a;
+    real<lower=0> etasq;
+    real<lower=0> rhosq;
+}
+model{
+    vector[10] lambda;
+    matrix[10,10] SIGMA;
+    rhosq ~ exponential( 0.5 );
+    etasq ~ exponential( 2 );
+    a ~ exponential( 1 );
+    b ~ exponential( 1 );
+    g ~ exponential( 1 );
+    SIGMA = cov_GPL2(Dmat, etasq, rhosq, 0.01);
+    k ~ multi_normal( rep_vector(0,10) , SIGMA );
+    for ( i in 1:10 ) {
+        lambda[i] = (a * P[i]^b/g) * exp(k[society[i]]);
+    }
+    T ~ poisson( lambda );
+}
+```
+
+Investigating posterior, we plot $\rho^2$ and $\eta^2$
