@@ -1,0 +1,116 @@
+# Chapter 11 - God Spiked the Integers
+```{r, include=FALSE}
+library(rethinking)
+```
+
+GLMs have internal parameters, which require more attention.
+
+Most common and useful: models for counts. We'll look at 2, binomial regression for binary classification, and Poisson Regression, for counts with unknown maximums.
+
+## 11.1 - Binomial Regression
+
+$$
+y \sim \text{Binomial}(n,p)
+$$
+
+for count $y$ (greater than or equal to 0), $p$ successes, and $n$ trials. Two GLM "flavors" that are effectively the same model.
+
+1. Logistic Regression, for single-trial cases, outcome can only take 0 or 1.
+2. Aggregated Binomial Regression, for individual trials aggregated. Outcome can take any value up to $n$.
+
+### Logistic Regression: Pro-social chimpanzees
+
+Data from experiment evaluating social tendencies of chimpanzees. Two levers to pull, four dishes, each lever corresponds to two dishes. One lever delivers food to the animal pulling levers and the one across the table, the other only just to the one pulling the lever. Also control situation where opposite side is empty. Levers are also switched around to remove right/left dependencies.
+
+4 ```pulled_left``` is our outcome with ```prosoc_left``` and ```condition``` as right. Outcome is 0/1 for pulling the left-hand lever. ```prosoc_left``` is 0/1 is that the pro-social outcome is connected to the left hand lever. ```condition``` is 0/1 for partner or control.
+
+1-4 index, all permutations of 0/1 for predictors.
+
+1. 0/0 - two food on right, no partner
+2. 1/0 - two on the left, no partner
+3. 0/1 - two on the right, partner
+4. 1/1/ - two on the left, partner
+
+Target model
+
+\begin{align*}
+  L_i &\sim \text{Binomial}(1, p_i)\\
+  \text{logit}(p_i) &= \alpha_{\text{ACTOR}[i]} + \beta_{\text{TREATMENT}[i]}\\
+\end{align*}
+
+$L$ is 0/1 for ```pulled_left```, in some cases this might also be written $L_i \sim \text{Bernoulli}(p_i)$, the special case for 1.
+
+Now for priors, consider a simple logistic regression:
+
+\begin{align*}
+  L_i &\sim \text{Binomial}(1, p_i)\\
+  \text{logit}(p_i) &= \alpha\\
+  \alpha &\sim \text{Normal}(0,\omega)
+\end{align*}
+
+Pick something for $\omega$. First try with flat priors, $\omega=10$. To get to outcome scale we need a _inverse-link function_, ```inv_logit```.
+
+<center>
+![](plots/fig_11_3.png)
+</center>
+  
+Silly, assumes that it'll always pick 0 or 1, by contrast 1.5 (blue) is less polarizing. Similar effect shown for $\beta$, comparing a normal prior of width 10 and 0.5,the latter is much better, and assumes low differences between the two.
+  
+  
+Run posterior with HMC, Stan code:
+
+```
+data{
+    int pulled_left[504];
+    int treatment[504];
+    int actor[504];
+}
+parameters{
+    vector[7] a;
+    vector[4] b;
+}
+model{
+    vector[504] p;
+    b ~ normal( 0 , 0.5 );
+    a ~ normal( 0 , 1.5 );
+    for ( i in 1:504 ) {
+        p[i] = a[actor[i]] + b[treatment[i]];
+        p[i] = inv_logit(p[i]);
+    }
+    pulled_left ~ binomial( 1 , p );
+}
+generated quantities{
+    vector[504] log_lik;
+    vector[504] p;
+    for ( i in 1:504 ) {
+        p[i] = a[actor[i]] + b[treatment[i]];
+        p[i] = inv_logit(p[i]);
+    }
+    for ( i in 1:504 ) log_lik[i] = binomial_lpmf( pulled_left[i] | 1 , p[i] );
+}
+```
+
+Output:
+
+```
+      mean   sd  5.5% 94.5% n_eff Rhat4
+a[1] -0.46 0.33 -1.02  0.07   587     1
+a[2]  3.91 0.79  2.71  5.26  1274     1
+a[3] -0.75 0.34 -1.31 -0.22   602     1
+a[4] -0.75 0.35 -1.33 -0.20   617     1
+a[5] -0.45 0.33 -0.97  0.08   623     1
+a[6]  0.47 0.34 -0.08  1.02   699     1
+a[7]  1.96 0.41  1.33  2.61   787     1
+b[1] -0.04 0.29 -0.48  0.42   626     1
+b[2]  0.49 0.29  0.03  0.94   563     1
+b[3] -0.38 0.29 -0.84  0.09   551     1
+b[4]  0.37 0.29 -0.09  0.82   530     1
+```
+
+First 7 "a" values are unique intercepts for each chimp.
+
+<center>
+![](plots/fig_m11_4.png)
+</center>
+
+Each line is an actor, 2 has a strong preference, picks right lever every single time.
