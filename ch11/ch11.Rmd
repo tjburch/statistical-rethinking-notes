@@ -113,4 +113,24 @@ First 7 "a" values are unique intercepts for each chimp.
 ![](plots/fig_m11_4.png)
 </center>
 
-Each line is an actor, 2 has a strong preference, picks right lever every single time.
+Note here they're put on the outcome scale. Each line is an actor, 2 has a strong preference, picks right lever every single time.
+
+Next, the treatment effects, on the logit scale. Note here we care about when prosocial behavior is chosen and a partner is present, so we compare rows 1 and 3 (R/N vs R/P) and 2 vs 4 (same for left).
+
+<center>
+![](plots/fig_m11_4_treatment.png)
+</center>
+
+What we would expect if prosocial behavior existed would be a large difference, but we don't see that, the difference of both posteriors are consistent with 0.
+
+Next we do a posterior prediction check, looking at how the model predicts treatments vs actual (remember, an exact match here would be overfitting).
+
+<center>
+![](plots/fig_11_4.png)
+</center>
+
+Can also consider interaction - effect of prosocial option depends on partner being present. Train this model, and evaluate WAIC and PSIS and find this isn't any better.
+
+### Relative Shark and Absolute Penguin
+
+
