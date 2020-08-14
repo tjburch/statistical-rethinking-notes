@@ -133,4 +133,38 @@ Can also consider interaction - effect of prosocial option depends on partner be
 
 ### Relative Shark and Absolute Penguin
 
+Previous sction fucses on _absolute effects_ - difference a counter-factual change makes on the absolute scale of measurement.
+
+Logistic regressions often interpreted through _relative effects_ - proportional changes in odds of an outcome. Calculate _proportional odds_ by exponentiating POI. 
+
+```
+post <- extract.samples(m11.4)
+mean( exp(post$b[,4]-post$b[,2]) )
+```
+
+Gives result of 0.92, which is an 8% reduction in odds by adding a partner.
+
+Section title: More likely for penguins to be attacked by sharks than humans, why relative effects matter.
+
+### Agreggated Binomial: Chimpanzees again, condensed
+
+Data was organized such that a row was a pull - switch to count-based data. We can then create a binomial model with $n=18$:
+
+```
+m11.6 <- ulam(
+    alist(
+        left_pulls ~ dbinom( 18 , p ) ,
+        logit(p) <- a[actor] + b[treatment] ,
+        a[actor] ~ dnorm( 0 , 1.5 ) ,
+        b[treatment] ~ dnorm( 0 , 0.5 )
+    ) , data=dat , chains=4 , log_lik=TRUE )
+```
+
+This will give the same posterior, but a very different PSIS and WAIC score! The immportant thing to note here is that the aggregated probabilities are larger, because the binomial accounts for all the orders 6 successes could appear in 9 trials, the difference is meaningless.
+
+It also throws the pareto $k$ warning again, which we didn't get in the non-aggregated approach - this comes from cross-validation that leaves one out, in this case leaving 18 out. tl;dr - using WAIC or PSIS should only use logistic regression format, not aggregated, because it assumes only large chunks of data are seperable.
+
+### Aggregated binomial: Graduate school admissions
+
+
 
