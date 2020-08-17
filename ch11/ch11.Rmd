@@ -166,5 +166,204 @@ It also throws the pareto $k$ warning again, which we didn't get in the non-aggr
 
 ### Aggregated binomial: Graduate school admissions
 
+Next datset we look at has a non-constant number of trials, graduate school admissions at UC Berkely. Table with department, gender, admittance number, rejection number, applications.
+
+```
+   dept applicant.gender admit reject applications
+1     A             male   512    313          825
+2     A           female    89     19          108
+```
+
+Looking for gender bias, so binomial regression:
+
+\begin{align*}
+  A_i &\sim \text{Binomial}(N_i, p_i)\\
+  \text{logit}(p_i) &= \alpha_{\text{GID}[i]}\\
+  \alpha_j &\sim \text{Normal}(0,1.5)
+\end{align*}
+
+Where $N_i$ is the number of applications for row $i$.
+
+Posterior for males a[1] is higher than for females. Log-odds difference is 0.61, probability scale is 14%. Drawing 
+
+<center>
+![](plots/fig_11_5.png)
+</center>
+
+Predictions are terrible. This case was a modeling issue - we asked "what are the average probabilities of admission for females and males, across all departments?" But... veries by department. Reframing model:
+
+\begin{align*}
+  A_i &\sim \text{Binomial}(N_i, p_i)\\
+  \text{logit}(p_i) &= \alpha_{\text{GID}[i]} + \delta_{\text{DEPT}[i]}\\
+  \alpha_j &\sim \text{Normal}(0,1.5)\\
+  \delta_k &\sim \text{Normal}(0,1.5)
+\end{align*}
+
+Use ```coerce_index``` to change department to change dept to index.
+
+```
+dat_list$dept_id <- rep(1:6,each=2)
+m11.8 <- ulam(
+  alist(
+    admit ~ dbinom( applications , p ) ,
+    logit(p) <- a[gid] + delta[dept_id] ,
+    a[gid] ~ dnorm( 0 , 1.5 ) ,
+    delta[dept_id] ~ dnorm( 0 , 1.5 )
+  ) , data=dat_list , chains=4 , iter=4000 )
+```
+
+Male intercept ```a[1]``` is smaller on average than for females. Calculate on both relative and true scales
+
+```
+        mean   sd  5.5% 94.5%      histogram
+diff_a -0.10 0.08 -0.23  0.03 ▁▁▁▁▂▅▇▇▅▂▁▁▁▁
+diff_p -0.02 0.02 -0.05  0.01       ▁▁▂▇▇▂▁▁
+```
+
+So if any bias, against males, about 2% on average. This changed so much because application and admission rates vary across departments, looking at applications:
+
+```
+          A    B    C    D    E    F
+male   0.88 0.96 0.35 0.53 0.33 0.52
+female 0.12 0.04 0.65 0.47 0.67 0.48
+```
+
+So A gets 88% of it's from males, E gets 33%.
+
+Probably causally, gender influences department choice, department choice influences chance of admission
+
+```{r, fig.height=2}
+library(dagitty)
+base_dag <- dagitty( "dag {
+  G -> D 
+  G -> A
+  D -> A
+}")
+coordinates(base_dag) <- list( x=c(G=0,D=1,A=2) , y=c(G=1,D=0,A=1) ) 
+drawdag( base_dag)
+```
+
+
+Indirect causal path $G \rightarrow D \rightarrow A$, need to condition on $D$ to close the indirect path, which we do. What if unobserved confounds influencing both departments and admissions?
+
+```{r, fig.height=2}
+unobserved_dag <- dagitty( "dag {
+  U [unobserved]
+  D <- U -> A
+  G -> D 
+  G -> A
+  D -> A
+}")
+coordinates(unobserved_dag) <- list( x=c(G=0,D=1,A=2,U=2) , y=c(G=1,D=0,A=1,U=0) ) 
+drawdag( unobserved_dag)
+```
+
+
+$U$ could be something like academic ability, in which case this would be conditioning on a collider.
+
+LAst, model 11.8 is over-parameterized, ```a[1]``` is redundant with ```a[2]```.
+
+## 11.2 - Poisson Regression
+
+Binomial works for 0 to a known upper bound, what if we don't know the upper bound? E.g. Fishing - $p$ small, $N$ very large.
+
+```{r}
+y <- rbinom(1e5,1000,1/1000)
+c( mean(y) , var(y) )
+```
+
+You have a mean and variance that are similar, a _Poisson Distribution_. One parameter, $\lambda$, the expected value of $y$ and variance of the counts. Conventional link function is log, forcing it to be positive.
+
+\begin{align*}
+  y_i &\sim \text{Poisson}(\lambda_i)\\
+  \log(\lambda_i) &= \alpha + \beta(x_i - \bar{x})
+\end{align*}
+
+### Example: Oceanic tool complexity
+
+Theories that larger populations develop and sustain more complex tools. Also, contact rates among populations factor in, study rates in Oceanic societies.
+
+```
+      culture population contact total_tools mean_TU
+1    Malekula       1100     low          13     3.2
+2     Tikopia       1500     low          22     4.7
+3  Santa Cruz       3600     low          24     4.0
+4         Yap       4791    high          43     5.0
+5    Lau Fiji       7400    high          33     5.0
+6   Trobriand       8000    high          19     4.0
+7       Chuuk       9200    high          40     3.8
+8       Manus      13000     low          28     6.6
+9       Tonga      17500    high          55     5.4
+10     Hawaii     275000     low          71     6.6
+```
+
+Not a lot of data, will use regularization, but sample-size concerns matter less for Bayesians - if you get the piror back, you don't have enough data. Want to model the ideas that tools increases with log population size, tools increase with contact rate, and impact of population is moderated by high contact.
+
+Standardize population, index for contact
+
+```
+d$P <- scale( log(d$population) )
+d$contact_id <- ifelse( d$contact=="high" , 2 , 1 )
+```
+
+Model is
+
+\begin{align*}
+  T_i &\sim \text{Poisson}(\lambda_i)\\
+  \log \lambda_i &= \alpha_{\text{CID}[i]} + \beta_{\text{CID}[i]} \log P_i\\
+\end{align*}
+
+We'll determine priors for $\alpha$ and $\beta$. Below compare $\alpha \sim \text{Normal}(0,10)$ and  $\alpha \sim \text{Normal}(3,0.5)$. The black one is flat and has crazy expectations.
+
+<center>
+![](plots/fig_11_7.png)
+</center>
+
+For $\beta$ try several things (below), ultimately decide on $\beta \sim \text{Normal}(0,0.2)$
+
+<center>
+![](plots/fig_11_8.png)
+</center>
+
+Poisson models with log links create _log-linear_ relationships with predictor variables. Approximate posterior, using both the interaction model and one with simple slope intercept:
+
+```
+# intercept only
+m11.9 <- ulam(
+  alist(
+    T ~ dpois( lambda ),
+    log(lambda) <- a,
+    a ~ dnorm( 3 , 0.5 )
+  ), data=dat , chains=4 , log_lik=TRUE )
+
+# interaction model
+m11.10 <- ulam(
+  alist(
+    T ~ dpois( lambda ),
+    log(lambda) <- a[cid] + b[cid]*P,
+    a[cid] ~ dnorm( 3 , 0.5 ),
+    b[cid] ~ dnorm( 0 , 0.2 )
+  ), data=dat , chains=4 , log_lik=TRUE )
+```
+
+Comparing gives:
+
+```
+        PSIS    SE dPSIS   dSE pPSIS weight
+m11.10  84.5 13.24   0.0    NA   6.6      1
+m11.9  141.0 33.43  56.5 33.52   7.9      0
+```
+
+(plus the Pareto $k$ warning, since it's a small dataset). Plotting the posterior
+
+<center>
+![](plots/fig_11_9a.png)
+</center>
+
+
+Open points are low-contact, closed are high-contact, point size are scaled by Pareto $k$, dashed curve is the low-contact mean, solid is the high-contact mean.
+
+You can also plot this with a non-log approach, but Hawaii throws everything off. 
+
 
 
