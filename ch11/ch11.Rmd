@@ -133,7 +133,7 @@ Can also consider interaction - effect of prosocial option depends on partner be
 
 ### Relative Shark and Absolute Penguin
 
-Previous sction fucses on _absolute effects_ - difference a counter-factual change makes on the absolute scale of measurement.
+Previous section focuses on _absolute effects_ - difference a counter-factual change makes on the absolute scale of measurement.
 
 Logistic regressions often interpreted through _relative effects_ - proportional changes in odds of an outcome. Calculate _proportional odds_ by exponentiating POI. 
 
@@ -146,7 +146,7 @@ Gives result of 0.92, which is an 8% reduction in odds by adding a partner.
 
 Section title: More likely for penguins to be attacked by sharks than humans, why relative effects matter.
 
-### Agreggated Binomial: Chimpanzees again, condensed
+### Aggregated Binomial: Chimpanzees again, condensed
 
 Data was organized such that a row was a pull - switch to count-based data. We can then create a binomial model with $n=18$:
 
@@ -160,13 +160,13 @@ m11.6 <- ulam(
     ) , data=dat , chains=4 , log_lik=TRUE )
 ```
 
-This will give the same posterior, but a very different PSIS and WAIC score! The immportant thing to note here is that the aggregated probabilities are larger, because the binomial accounts for all the orders 6 successes could appear in 9 trials, the difference is meaningless.
+This will give the same posterior, but a very different PSIS and WAIC score! The important thing to note here is that the aggregated probabilities are larger, because the binomial accounts for all the orders 6 successes could appear in 9 trials, the difference is meaningless.
 
-It also throws the pareto $k$ warning again, which we didn't get in the non-aggregated approach - this comes from cross-validation that leaves one out, in this case leaving 18 out. tl;dr - using WAIC or PSIS should only use logistic regression format, not aggregated, because it assumes only large chunks of data are seperable.
+It also throws the pareto $k$ warning again, which we didn't get in the non-aggregated approach - this comes from cross-validation that leaves one out, in this case leaving 18 out. tl;dr - using WAIC or PSIS should only use logistic regression format, not aggregated, because it assumes only large chunks of data are separable.
 
 ### Aggregated binomial: Graduate school admissions
 
-Next datset we look at has a non-constant number of trials, graduate school admissions at UC Berkely. Table with department, gender, admittance number, rejection number, applications.
+Next dataset we look at has a non-constant number of trials, graduate school admissions at UC Berkeley. Table with department, gender, admittance number, rejection number, applications.
 
 ```
    dept applicant.gender admit reject applications
@@ -190,7 +190,7 @@ Posterior for males a[1] is higher than for females. Log-odds difference is 0.61
 ![](plots/fig_11_5.png)
 </center>
 
-Predictions are terrible. This case was a modeling issue - we asked "what are the average probabilities of admission for females and males, across all departments?" But... veries by department. Reframing model:
+Predictions are terrible. This case was a modeling issue - we asked "what are the average probabilities of admission for females and males, across all departments?" But... varies by department. Reframing model:
 
 \begin{align*}
   A_i &\sim \text{Binomial}(N_i, p_i)\\
@@ -261,7 +261,7 @@ drawdag( unobserved_dag)
 
 $U$ could be something like academic ability, in which case this would be conditioning on a collider.
 
-LAst, model 11.8 is over-parameterized, ```a[1]``` is redundant with ```a[2]```.
+Last, model 11.8 is over-parameterized, ```a[1]``` is redundant with ```a[2]```.
 
 ## 11.2 - Poisson Regression
 
@@ -297,7 +297,7 @@ Theories that larger populations develop and sustain more complex tools. Also, c
 10     Hawaii     275000     low          71     6.6
 ```
 
-Not a lot of data, will use regularization, but sample-size concerns matter less for Bayesians - if you get the piror back, you don't have enough data. Want to model the ideas that tools increases with log population size, tools increase with contact rate, and impact of population is moderated by high contact.
+Not a lot of data, will use regularization, but sample-size concerns matter less for Bayesians - if you get the prior back, you don't have enough data. Want to model the ideas that tools increases with log population size, tools increase with contact rate, and impact of population is moderated by high contact.
 
 Standardize population, index for contact
 
@@ -354,7 +354,11 @@ m11.10  84.5 13.24   0.0    NA   6.6      1
 m11.9  141.0 33.43  56.5 33.52   7.9      0
 ```
 
-(plus the Pareto $k$ warning, since it's a small dataset). Plotting the posterior
+(plus the Pareto $k$ warning, since it's a small dataset). 
+
+The only place model complexity and parameter count have a clear relationship is a simple linear regression with flat priors. Also applicable to data distributions - depends on details of model and composition of sample.
+
+Plotting the posterior
 
 <center>
 ![](plots/fig_11_9a.png)
@@ -363,7 +367,78 @@ m11.9  141.0 33.43  56.5 33.52   7.9      0
 
 Open points are low-contact, closed are high-contact, point size are scaled by Pareto $k$, dashed curve is the low-contact mean, solid is the high-contact mean.
 
-You can also plot this with a non-log approach, but Hawaii throws everything off. 
+You can also plot this with a non-log approach, but Hawaii throws everything off. Extreme population size, most tools - doesn't mean it should be dropped off as an "outlier," just strongly affects posterior.
+
+Plot takeaways - high contact (solid) is higher than low contact(dashed), but model also allows for it to be smaller. Could display this with a counter-factual high-contact Hawaii: would cause mean at high population to rise.
+
+This is a bit of a silly pattern though, and is a result of intercept being a free parameter. No guarantee that we have 0 at population size 0.
+
+Could use the predictions of an "actual" model, developed from scientific knowledge and hypothetical causal effects, instead of a GLM. Simple model is innovation proportional to population size with diminishing return, tool loss proportional to number of tools.
+
+For population size $P$, tools $T$, and $\alpha$, $\beta$, $\gamma$  parameters, per time step:
+
+$$
+  \Delta T = \alpha P^\beta - \gamma T
+$$
+Finding an equilibrium number of tools , $\Delta T=0$, and solve for $T$:
+
+$$
+  \hat{T} = \frac{\alpha P^\beta}{\gamma}
+$$
+
+Using this in a model:
+
+\begin{align*}
+  T_i &\sim \text{Poisson}(\lambda_i)\\
+  \lambda_i &= \alpha P_i^\beta / \gamma
+\end{align*}
 
 
+This would look like:
+```
+dat2 <- list( T=d$total_tools, P=d$population, cid=d$contact_id ) m11.11 <- ulam(
+alist(
+T ~ dpois( lambda ),
+lambda <- exp(a[cid])*P^b[cid]/g, a[cid] ~ dnorm(1,1),
+b[cid] ~ dexp(1),
+g ~ dexp(1)
+), data=dat2 , chains=4 , log_lik=TRUE )
+```
+
+
+### Negative binomial (gamma-Poisson) models
+
+Poisson models often have a lot of unexplained variation, ignoring it can cause confounds. Common solution is to swap Poisson for _negative binomial_ or _Gamma-Poisson_ distribution, really a Poisson in disguise.
+
+### Example: Exposure and the offset
+
+$\lambda$ is "expected value" but often thought of as _rate_. Both make sense, which makes models good for when _exposure_ varies across cases.
+
+Example - one monastery calculates daily totals of manuscripts, one does weekly, how to compare? $\lambda = \mu/\tau$, for events $\mu$ per unit time or distance $\tau$, making the link function look like:
+
+\begin{align*}
+  y_i &\sim \text{Poisson}(\lambda_i)\\
+  \log (\lambda_i) = \log \frac{\mu_i}{\tau_i} = \alpha + \beta x_i
+\end{align*}
+
+Using log properties,
+
+$$
+\log \lambda_i = \log \mu_i - \log \tau_i = \alpha + \beta x_i.
+$$
+In this $\tau$ is "exposures," so if different exposures, expected value on row $i$ is:
+
+$$
+\log \mu_i = \log \tau_i + \alpha + \beta x_i
+$$
+So then we rewrite models with different exposures like:
+
+\begin{align*}
+  y_i &\sim \text{Poisson}(\mu_i)\\
+  \log \mu_i = \log \tau_i + \alpha + \beta x_i
+\end{align*}
+
+where $\tau$ is now just a data column. Can also put a hyperparameter in front of $\log \tau_i$, if rate isn't constant with time.
+
+end p365/381 "last example" paragraph
 
