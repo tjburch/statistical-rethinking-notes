@@ -110,7 +110,7 @@ b[4]  0.37 0.29 -0.09  0.82   530     1
 First 7 "a" values are unique intercepts for each chimp.
 
 <center>
-![](plots/fig_m11_4.png)
+![](plots/precis_11_4_a.png)
 </center>
 
 Note here they're put on the outcome scale. Each line is an actor, 2 has a strong preference, picks right lever every single time.
@@ -118,7 +118,7 @@ Note here they're put on the outcome scale. Each line is an actor, 2 has a stron
 Next, the treatment effects, on the logit scale. Note here we care about when prosocial behavior is chosen and a partner is present, so we compare rows 1 and 3 (R/N vs R/P) and 2 vs 4 (same for left).
 
 <center>
-![](plots/fig_m11_4_treatment.png)
+![](plots/precis_11_4_b.png)
 </center>
 
 What we would expect if prosocial behavior existed would be a large difference, but we don't see that, the difference of both posteriors are consistent with 0.
@@ -232,7 +232,7 @@ So A gets 88% of it's from males, E gets 33%.
 
 Probably causally, gender influences department choice, department choice influences chance of admission
 
-```{r, fig.height=2}
+```{r, fig.height=2, fig.align='center'}
 library(dagitty)
 base_dag <- dagitty( "dag {
   G -> D 
@@ -246,7 +246,7 @@ drawdag( base_dag)
 
 Indirect causal path $G \rightarrow D \rightarrow A$, need to condition on $D$ to close the indirect path, which we do. What if unobserved confounds influencing both departments and admissions?
 
-```{r, fig.height=2}
+```{r, fig.height=2, fig.align='center'}
 unobserved_dag <- dagitty( "dag {
   U [unobserved]
   D <- U -> A
@@ -571,9 +571,146 @@ On average, a 13% increase in choosing the career by doubling income (important,
 
 ### Predictors matched to observations
 
+Next - each observed outcome has unique predictors, now want to estimate association between income and career choice. Stan model:
+
+```
+data{
+    int N; // number of observations
+    int K; // number of outcome values
+    int career[N]; // outcome
+    real family_income[N];
+}
+parameters{
+    vector[K-1] a; // intercepts
+    vector[K-1] b; // coefficients on family income
+}
+model{
+    vector[K] p;
+    vector[K] s;
+    a ~ normal(0,1.5);
+    b ~ normal(0,1);
+    for ( i in 1:N ) {
+        for ( j in 1:(K-1) ) s[j] = a[j] + b[j]*family_income[i];
+        s[K] = 0; // the pivot
+        p = softmax( s );
+        career[i] ~ categorical( p );
+    }
+}
+```
 
 
+### Multinomial in disguise as Poisson
+
+Can also fit categorical model as a seires of Poisson likelihoods, usually easier and gets the same inferences. Going back to UC Berkeley data, with binomial and poisson models:
+
+```
+# binomial model of overall admission probability
+m_binom <- quap(
+    alist(
+        admit ~ dbinom(applications,p),
+        logit(p) <- a,
+        a ~ dnorm( 0 , 1.5 )
+    ), data=d )
+
+# Poisson model of overall admission rate and rejection rate
+dat <- list( admit=d$admit , rej=d$reject )
+m_pois <- ulam(
+    alist(
+        admit ~ dpois(lambda1),
+        rej ~ dpois(lambda2),
+        log(lambda1) <- a1,
+        log(lambda2) <- a2,
+        c(a1,a2) ~ dnorm(0,1.5)
+    ), data=dat , chains=3 , cores=3 )
+```
+
+The binomial probability is given by:
+
+```
+inv_logit(coef(m_binom))
+```
+and is 0.388
+
+The Poisson model has probability:
+
+$$
+  p_{\text{ADMIT}} = \frac{\lambda_1}{\lambda_1 + \lambda_2} = \frac{\exp(a_1)}{\exp{a_1}+\exp(a_2)}
+$$
+
+```
+k <- coef(m_pois)
+a1 <- k['a1']
+a2 <- k['a2'] exp(a1)/(exp(a1)+exp(a2))
+```
+Also giving 0.388 - sometimes this is easier.
 
 
+## 11.4 - Censoring and Survival
+
+Sometimes instead of modeling counts, model time between events - _Survival models_. Work for countable things where we want to predict durations, all positive real values.
+
+Distances are also positive reals, measurements of displacement can be modeled similarly. 
+
+- Simplest distribution is _exponential distribution_, maximum entropy when all we know is average displacement.
+
+- Sometimes _gamma distribution_ is used too, maximum entropy for fixed mean and fixed mean magniude (log)
+
+Tricky part of survival analysis is _censoring_, when event of interest doesn't happen in observation window.
+
+### Actual Cats
+
+For observed observations, probability of observed wait time is $D_I \sim \text{Exponential}(\lambda_i)$, 
+
+$$
+  p(D_i|\lambda_i) = \lambda_i \exp(-\lambda_i D_i)
+$$
+
+Probability comes from _cumulative probability distribution_ (CDF), which gives proportion of events (cats adopted) before or at a certain number of days. For exponential distribution,
+
+$$
+  p(D_i|\lambda_i) = 1-\exp(-\lambda_i D_i).
+$$
+
+One minus the CDF is probability an event hasn't happened on or before a time interval, the _complementary cumulative probability distribution_. For exponential distribution,
+
+$$
+  p(D_i|\lambda_i) = \exp(-\lambda_i D_i).
+$$
+
+Full survival models:
+\begin{align*}
+  D_i|A_i=1 &\sim \text{Exponential}(\lambda_i)\\
+  D_i|A_i=0 &\sim \text{Exponential-CCDF}(\lambda_i)\\
+  \lambda_i &= 1/\mu_i \\
+  \log \mu_i &= \alpha_{\text{CID}[i]}
+\end{align*}
+
+In code:
+
+```
+m11.15 <- ulam( 
+  alist(
+    days_to_event|adopted==1 ~ exponential( lambda ), 
+    days_to_event|adopted==0 ~ custom(exponential_lccdf( !Y | lambda )),
+    lambda <- 1.0/mu,
+    log(mu) <- a[color_id],
+    a[color_id] ~ normal(0,1)
+  ), data=dat , chains=4 , cores=4 ) 
+```
+With posterior:
+
+```
+     mean   sd 5.5%   94.5%  histogram
+a[1] 4.05 0.03 4.01    4.09  ▁▁▁▂▅▇▅▂▁▁
+a[2] 3.88 0.01 3.87    3.90     ▁▁▂▇▇▃▁▁
+D[1] 57.44 1.47 55.11 59.77  ▁▁▁▃▇▇▅▂▁▁▁
+D[2] 48.44 0.49 47.71 49.22    ▁▁▃▇▇▂▁▁
+```
+
+
+## 11.5 - Summary
+
+This chapter used GLMs to model counts. Fundamental issue is that parameters are on a different scale, typically log-odds for binomial or log-rate for poisson, than the variable they describe.
+   
 
 
