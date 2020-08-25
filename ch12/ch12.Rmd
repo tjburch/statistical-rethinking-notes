@@ -1,0 +1,106 @@
+# Chapter 12 - Monsters and Mixtures
+```{r, include=FALSE}
+library(rethinking)
+```
+
+Chapter is about piecing together multiple statistical models. Three common cases, _over-dispersion_, _zero-inflated_ and _zero-augmented_, and _ordered categorical_.
+
+## 12.1 - Over-dispersed counts 
+
+Chapter 7 argued models based on normal distributions are overly sensitive to outliers, due to the thin Gaussian tail, also applies to count models.
+
+Variance of a variable also called _dispersion_, when variance is more variable than the pure process, it's called _over-dispersion_.
+
+_Continuous Mixture_ models - a linear model is attached to a distribution of observations.
+
+### Beta-Binomial
+
+_Beta-Binomial_ model assumes each biomial count observation has its own probability of success; estimates the distribution of probabilities across cases, instead of a single probablility.
+
+UC Berkeley example, has large variation. This model assumes that each has it's own, unique, unobserved probability of admission. Beta just makes the math easy because it's a conjugate prior.
+
+
+The distribution
+```{r}
+pbar <- 0.5
+theta <- 5
+curve( dbeta2(x,pbar,theta) , from=0 , to=1 ,
+    xlab="probability" , ylab="Density" )
+```
+
+The x-axis is probability values here, important to note.
+
+Model below. Bind to $\bar{p}$ so changes in predictors change the central tendency.
+
+\begin{align*}
+  A_i &\sim \text{BetaBinomial}(N_i,\bar{p_i},\theta)\\
+  \text{logit}(\bar{p_i}) &= \alpha_{\text{GID}[i]}\\
+  \alpha_j &\sim \text{Normal}(0,1.5)\\
+  \theta &= \phi + 2
+  \phi &\sim \text{Exponential}(1)
+\end{align*}
+
+The variables: $A$ is outcome (```admit```), $N$ is number of applications, $\text{GID}[i]$ is gender id. 
+
+The priors have a trick - assume dispersion of at least 2, flat. Less piles up on 0 and 1, more is increasingly heaped on a value. So we force that and add an exponential distribution
+
+```{r}
+library(rethinking)
+data(UCBadmit)
+d <- UCBadmit
+d$gid <- ifelse( d$applicant.gender=="male" , 1L , 2L )
+dat <- list( A=d$admit , N=d$applications , gid=d$gid )
+m12.1 <- ulam(
+    alist(
+        A ~ dbetabinom( N , pbar , theta ),
+        logit(pbar) <- a[gid],
+        a[gid] ~ dnorm( 0 , 1.5 ),
+        transpars> theta <<- phi + 2.0,
+        phi ~ dexp(1)
+    ), data=dat , chains=2 ,cmdstan = TRUE)
+```
+
+There's some interesting things with that model, transforming parameters of theta, so looking at the stan code:
+
+```{r}
+stancode(m12.1)
+```
+
+```{r}
+  post <- extract.samples( m12.1 )
+  post$da <- post$a[,1] - post$a[,2]
+  precis( post , depth=2 )
+```
+
+
+Parameter ```a[1]``` is log-odds of admission for males, lower than ```a[2]```, text gives -0.45 and -0.34 respectively. Difference between the two is given by ```da```, which is highly uncertain -0.11.
+
+Remember before there was a confounding - it appeared female admission was lower until the department predictor was added. That doesn't happen here since each row has its own unobserved intercept, sampled from a beta distribution with mean $\bar{p_i}$ and dispersion $\theta$
+
+```{r}
+gid <- 2
+# draw posterior mean beta distribution
+curve( dbeta2(x,mean(logistic(post$a[,gid])),mean(post$theta)) , from=0 , to=1 ,
+    ylab="Density" , xlab="probability admit", ylim=c(0,3) , lwd=2 )
+
+# draw 50 beta distributions sampled from posterior
+for ( i in 1:50 ) {
+    p <- logistic( post$a[i,gid] )
+    theta <- post$theta[i]
+    curve( dbeta2(x,p,theta) , add=TRUE , col=col.alpha("black",0.2) )
+}
+mtext( "distribution of female admission rates" )
+```
+
+Note the high degree of variation. Checking the posterior:
+
+```{r}
+postcheck( m12.1 )
+```
+
+
+Raw data is blue, 89% interval is between the $+$ signs. Model doesn't see departments, but does see heterogenetiy across rows and uses the beta distribution to estimate it.
+
+### Negative-binomial or gamma-Poisson
+
+
