@@ -15,7 +15,7 @@ _Continuous Mixture_ models - a linear model is attached to a distribution of ob
 
 ### Beta-Binomial
 
-_Beta-Binomial_ model assumes each biomial count observation has its own probability of success; estimates the distribution of probabilities across cases, instead of a single probablility.
+_Beta-Binomial_ model assumes each binomial count observation has its own probability of success; estimates the distribution of probabilities across cases, instead of a single probability.
 
 UC Berkeley example, has large variation. This model assumes that each has it's own, unique, unobserved probability of admission. Beta just makes the math easy because it's a conjugate prior.
 
@@ -36,7 +36,7 @@ Model below. Bind to $\bar{p}$ so changes in predictors change the central tende
   A_i &\sim \text{BetaBinomial}(N_i,\bar{p_i},\theta)\\
   \text{logit}(\bar{p_i}) &= \alpha_{\text{GID}[i]}\\
   \alpha_j &\sim \text{Normal}(0,1.5)\\
-  \theta &= \phi + 2
+  \theta &= \phi + 2\\
   \phi &\sim \text{Exponential}(1)
 \end{align*}
 
@@ -44,7 +44,7 @@ The variables: $A$ is outcome (```admit```), $N$ is number of applications, $\te
 
 The priors have a trick - assume dispersion of at least 2, flat. Less piles up on 0 and 1, more is increasingly heaped on a value. So we force that and add an exponential distribution
 
-```{r}
+```{r, results=FALSE, message=FALSE, warning=FALSE}
 library(rethinking)
 data(UCBadmit)
 d <- UCBadmit
@@ -99,8 +99,137 @@ postcheck( m12.1 )
 ```
 
 
-Raw data is blue, 89% interval is between the $+$ signs. Model doesn't see departments, but does see heterogenetiy across rows and uses the beta distribution to estimate it.
+Raw data is blue, 89% interval is between the $+$ signs. Model doesn't see departments, but does see heterogeneity across rows and uses the beta distribution to estimate it.
 
-### Negative-binomial or gamma-Poisson
+### Negative-Binomial or Gamma-Poisson
 
+_Negative-Binomial_ or _Gamma-Poisson_ assumes each Poisson count observation has its own rate. Two parameters, mean (rate) and dispersion (scale)
+
+$$
+y_i \sim \text{Gamma-Poisson}(\lambda_i,\phi)
+$$
+
+The variance of Gamma-Poisson is $\lambda + \lambda^2 / \phi$, larger $\phi$ gets more similar to pure Poisson.
+
+Going back to Oceanic tools dataset, we can make the outlier of Hawaii less influential by using Gamma-Poisson:
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+library(rethinking)
+data(Kline)
+d <- Kline
+d$P <- standardize( log(d$population) )
+d$contact_id <- ifelse( d$contact=="high" , 2L , 1L )
+
+dat2 <- list(
+    T = d$total_tools,
+    P = d$population,
+    cid = d$contact_id )
+
+m12.2 <- ulam(
+    alist(
+        T ~ dgampois( lambda , phi ),
+        lambda <- exp(a[cid])*P^b[cid] / g,
+        a[cid] ~ dnorm(1,1),
+        b[cid] ~ dexp(1),
+        g ~ dexp(1),
+        phi ~ dexp(1)
+    ), data=dat2 , chains=2, log_lik=TRUE , cmdstan = TRUE)
+```
+
+### Over-dispersion, entropy, information criteria
+
+Both beta-binomial and gamma-Poisson are maximum entropy distributions, just try to account for unobserved heterogeneity. They're harder to fit, but still conceptually transparent. 
+
+Don't use WAIC and PSIS (unless you're very sure). Ordinary binomial and Poisson models can be aggregated and disaggregated across rows without changing causal assumptions, not true of beta-binomial and gamma-Poisson.
+
+Once you include over-dispersion in multilevel models, the obstacle is reduced, this is for next chapter.
+
+## 12.2 - Zero-Inflated Outcomes
+
+Often, things are not emissions from any pure process, but a mixture - we can use a _mixture model_, which use more than one likelihood for the same outcome variable.
+
+Count variables are especially prone, particularly w.r.t. zeros.
+
+### Zero-Inflated Poisson
+
+Going back to dataset of monks copying manuscripts, this is binomial. But zero can arise from monks taking breaks on some days, but also in normal workdays as well.
+
+$p$ is probability they take a break, always yielding a zero, $p-1$ is probability they work, sometimes yielding 0 and sometimes more than 0. 
+
+\begin{align*}
+  \text{Pr}(0|p,\lambda) &= \text{Pr}(\text{break}|p) + \text{Pr}(\text{work}|p) \times \text{PR}(0|\lambda)\\
+  &= p + (1-p)\exp(-\lambda)
+\end{align*}
+
+Subsequently, 
+
+$$
+  \text{Pr}(y|y>0,p,\lambda) = \text{Pr}(\text{break}|p)(0) + \text{Pr}(\text{work}|p) \text{Pr}(y|\lambda) = (1-p)\frac{\lambda^y \exp(-\lambda)}{y!}
+$$
+
+Therefore we want the following model:
+
+\begin{align*}
+y_i &\sim \text{ZIPoisson}(p_i,\lambda_i)\\
+\text{logit}(p_i) &= \alpha_p + \beta_p x_i\\
+\log(\lambda_i) &= \alpha_\lambda + \beta_\lambda x_i
+\end{align*}
+
+Two linear models, two link functions, one for each process.
+
+Generating the data and plotting:
+
+```{r}
+# define parameters
+prob_drink <- 0.2 # 20% of days
+rate_work <- 1    # average 1 manuscript per day
+
+# sample one year of production
+N <- 365
+
+# simulate days monks drink
+set.seed(365)
+drink <- rbinom( N , 1 , prob_drink )
+
+# simulate manuscripts completed
+y <- (1-drink)*rpois( N , rate_work )
+
+simplehist( y , xlab="manuscripts completed" , lwd=4 )
+zeros_drink <- sum(drink)
+zeros_work <- sum(y==0 & drink==0)
+zeros_total <- sum(y==0)
+lines( c(0,0) , c(zeros_work,zeros_total) , lwd=4 , col=rangi2 )
+```
+
+
+Building the model (giving it a slight prior nudge, assuming monks work more than break):
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+m12.3 <- ulam(
+    alist(
+        y ~ dzipois( p , lambda ),
+        logit(p) <- ap,
+        log(lambda) <- al,
+        ap ~ dnorm( -1.5 , 1 ),
+        al ~ dnorm( 1 , 0.5 )
+    ) , data=list(y=y) , chains=2, cmdstan=TRUE)
+```
+
+Probably another case where it's useful to look under the hood:
+
+```{r}
+stancode(m12.3)
+```
+
+Extracting samples and reverting back to natural scales:
+
+```{r}
+post <- extract.samples( m12.3 )
+mean( inv_logit( post$ap ) ) # probability drink
+mean( exp( post$al ) )       # rate finish manuscripts, when not drinking
+```
+
+This gives us values for $p$, the probability of them drinking, and then the rate of production when they do work. Cannot say for sure which day, but can understand rates.
+
+## 12.3 - Ordered Categorical Outcomes
 
