@@ -1,6 +1,8 @@
 # Chapter 12 - Monsters and Mixtures
 ```{r, include=FALSE}
 library(rethinking)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
 ```
 
 Chapter is about piecing together multiple statistical models. Three common cases, _over-dispersion_, _zero-inflated_ and _zero-augmented_, and _ordered categorical_.
@@ -233,3 +235,146 @@ This gives us values for $p$, the probability of them drinking, and then the rat
 
 ## 12.3 - Ordered Categorical Outcomes
 
+Common to have ordered categories, leveled along a dimension - on a scale of 1 to 7 how much do you like a food. The result is _ordered categories_ - different from count because differences are not necessarily equal.
+
+In principle just a multinomial prediction, but ordering adds a constraint - predictions move in progression. Use a _cumulative link_ function - gives the probability that a value is that value or any smaller value.
+
+### Moral intuition
+
+Using data from philosophers and the trolley problem, asking "how morally permissible is it for an actor to pull the lever." Second problem changes it and says pulling the lever drops someone on the tracks (rather than switching tracks), which slows the trolley and saves 5 lives. Study how much worse people find the second than the first.
+
+```{r}
+library(rethinking) 
+data(Trolley)
+d <- Trolley
+simplehist(d$response, xlim=c(1,7), xlab="response")
+```
+
+1-7 here is "how morally permissible the act is."
+
+### Describing an ordered distribution with intercepts
+
+Want to redescribe the histogram on a log-cumulative-odds scale - the cumulative anolog of the logit link (logit is log-odds, cumulative logit is log-cumulative-odds).
+
+```{r}
+# discrete proportion of each response value
+pr_k <- table( d$response ) / nrow(d)
+
+# cumsum converts to cumulative proportions
+cum_pr_k <- cumsum( pr_k )
+
+# plot
+plot( 1:7 , cum_pr_k , type="b" , xlab="response" ,
+ylab="cumulative proportion" , ylim=c(0,1) )
+```
+
+
+Code above has changed it to the cumulative probabilities.
+
+Next want the log-cumulative odds that a response value $y_i$ is equal-to-or-less-than some outcome $k$,
+
+$$
+\log \frac{\Pr(y_i) \leq k}{1-\Pr(y_i \leq k)} = \alpha_k
+$$
+with $\alpha_k$ being a unique intercept to each possible outcome value.
+
+```{r}
+logit <- function(x) log(x/(1-x)) # convenience function
+round( lco <- logit( cum_pr_k ) , 2 )
+```
+
+(Note last one is infinity because $\log(1/(1-1)) = \infty$)
+
+Really want posterior distribution of $\alpha_k$. Observing $k$, we can get likelihood by subtraction:
+
+$$
+p_k = \Pr (y_i = k) = \Pr (y_i \leq k) - \Pr (y_i \leq k-1)
+$$
+
+In model form - two ways of expressing:
+
+One, used in the text:
+
+\begin{align*}
+  R_i &\sim \text{Ordered-logit}(\phi_i, \kappa)\\
+  \phi_i &= 0\\
+  \kappa_k &\sim \text{Normal}(0,1.5)
+\end{align*}
+
+The first line is the probability, the second is the linear model, the third is the common prior for each intercept.
+
+The other, more literal, expression:
+
+\begin{align*}
+  R_i &\sim \text{Categorical}(\mathbf{p})\\
+  p_1 &= q_1\\
+  p_k &= q_k-q_{k-1}  \text{ for } K>k>1\\
+  p_K &= 1 - q_{k-1}\\
+  \text{logit}(q_k) &= \kappa_k - \phi_i\\
+  \phi_i &= \text{terms of linear model}\\
+  \kappa_k &\sim \text{Normal(0,1.5)}
+\end{align*}
+
+The first is the probability of data, the second through 4th lines are the probabilities of each $k$, the 5th is the cumulative logit link, the 6th is the linear model, and the last is the common priors. This is brutal but exposes that it's just a categorical distribution.
+
+Fitting the basic model with no predictors:
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+m12.4 <- ulam(
+    alist(
+        R ~ dordlogit( 0 , cutpoints ), # zero is placeholder for linear model
+        cutpoints ~ dnorm( 0 , 1.5 )
+    ) , data=list( R=d$response ), chains=2 , cores=4 ,cmdstan=TRUE)
+```
+
+Can also construct in quap:
+
+```
+m12.4q <- quap(
+    alist(
+        response ~ dordlogit( 0 , c(a1,a2,a3,a4,a5,a6) ),
+        c(a1,a2,a3,a4,a5,a6) ~ dnorm( 0 , 1.5 )
+    ) , data=d , start=list(a1=-2,a2=-1,a3=0,a4=1,a5=2,a6=2.5) )
+```
+
+Looking at posterior:
+```{r}
+precis( m12.4 , depth=2 )
+```
+
+And getting back the cumulative probabilities:
+```{r}
+round( inv_logit(coef(m12.4)) , 3 )
+```
+
+
+### Adding predictors
+
+To include predictors, define the log-cumulative-odds of each response $k$ as a sum of intercept $\alpha_k$ and a linear model. For predictor $x$, this looks like $\phi_i = \beta x_i$. This makes the cumulative logit:
+
+\begin{align*}
+  \log \frac{ \Pr (y_i \leq k)}{1- \Pr (y_i \leq k)} &= \alpha_k - \phi_i``
+  \phi_i &= \beta x_i
+\end{align*}
+
+Automatically ensures correct ordering of outcomes.
+
+Turning back to the "trolley" problem, predictor variables are ```action```, ```intention```, and ```contact```:
+
+1. No action, contact, or intention 
+2. Action
+3. Contact
+4. Intention
+5. Action and intention 
+6. Contact and intention
+
+The log-cumulative-odds of each response is now:
+
+\begin{align*}
+  \log \frac{\Pr (y_i \leq k)}{1-\Pr(y_i \leq k)} &= \alpha_k - \phi_i
+  \phi_i &= \beta_A A_i + \beta_C C_i + B_{I,i} I_i\\
+  B_{I,i} &= \beta_I + \beta_{IA} A_i + \beta_IC C_i
+\end{align*}
+
+$A_i$ is action on row $i$, $I_i$ is intention, $C_i$ is contact.
+  
