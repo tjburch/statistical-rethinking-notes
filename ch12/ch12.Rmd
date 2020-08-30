@@ -1,7 +1,7 @@
 # Chapter 12 - Monsters and Mixtures
 ```{r, include=FALSE}
 library(rethinking)
-options(mc.cores = parallel::detectCores())
+#options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
 
@@ -254,7 +254,7 @@ simplehist(d$response, xlim=c(1,7), xlab="response")
 
 ### Describing an ordered distribution with intercepts
 
-Want to redescribe the histogram on a log-cumulative-odds scale - the cumulative anolog of the logit link (logit is log-odds, cumulative logit is log-cumulative-odds).
+Want to redescribe the histogram on a log-cumulative-odds scale - the cumulative analog of the logit link (logit is log-odds, cumulative logit is log-cumulative-odds).
 
 ```{r}
 # discrete proportion of each response value
@@ -376,5 +376,61 @@ The log-cumulative-odds of each response is now:
   B_{I,i} &= \beta_I + \beta_{IA} A_i + \beta_IC C_i
 \end{align*}
 
-$A_i$ is action on row $i$, $I_i$ is intention, $C_i$ is contact.
-  
+$A_i$ is action on row $i$, $I_i$ is intention, $C_i$ is contact. Creating a model:
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+dat <- list(
+    R = d$response,
+    A = d$action,
+    I = d$intention,
+    C = d$contact )
+m12.5 <- ulam(
+    alist(
+        R ~ dordlogit( phi , cutpoints ),
+        phi <- bA*A + bC*C + BI*I ,
+        BI <- bI + bIA*A + bIC*C ,
+        c(bA,bI,bC,bIA,bIC) ~ dnorm( 0 , 0.5 ),
+        cutpoints ~ dnorm( 0 , 1.5 )
+    ) , data=dat , chains=4 , cores=4 )
+
+plot( precis(m12.5) , xlim=c(-1.4,0) )
+```
+
+Each slope is reliably negative. Intention and contact is the worst, but the other two individually don't have a large impact. Easier to plot the posterior predictions
+
+```{r}
+plot( NULL , type="n" , xlab="intention" , ylab="probability" ,
+    xlim=c(0,1) , ylim=c(0,1) , xaxp=c(0,1,1) , yaxp=c(0,1,2) )
+
+
+kA <- 0     # value for action
+kC <- 0     # value for contact
+kI <- 0:1   # values of intention to calculate over
+pdat <- data.frame(A=kA,C=kC,I=kI)
+phi <- link( m12.5 , data=pdat )$phi
+
+## R code 12.28
+post <- extract.samples( m12.5 )
+for ( s in 1:50 ) {
+    pk <- pordlogit( 1:6 , phi[s,] , post$cutpoints[s,] )
+    for ( i in 1:6 ) lines( kI , pk[,i] , col=grau(0.1) )
+}
+```
+
+Here y-axis is CDF and x-axis is a predictor variable. Again, you can do this for kA and kC to make a triptych plot. 
+
+Also you can make a implied histogram of outcomes, use sim to simulate posteriors.
+
+```{r}
+kA <- 0     # value for action
+kC <- 1     # value for contact
+kI <- 0:1   # values of intention to calculate over
+pdat <- data.frame(A=kA,C=kC,I=kI)
+s <- sim( m12.5 , data=pdat )
+simplehist( s , xlab="response" )
+```
+
+
+## 12.4 - Ordered Categorical Predictors
+
+
