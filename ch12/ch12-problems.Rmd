@@ -1,0 +1,35 @@
+## Chapter 12 problems
+
+```{r, include=FALSE}
+library(rethinking)
+```
+
+__12E1.__
+
+> What is the difference between an ordered categorical variable and an unordered one? Define
+and then give an example of each.
+
+Ordered categorical are progressive with possibly varying $\delta$ values between each step - example used in chapter is education, those with masters must have a bachelors. An unordered categorical variable is one without a logical progression, like colors of a marble.
+
+__12E2.__
+
+> What kind of link function does an ordered logistic regression employ? How does it differ from an ordinary logit link?
+
+Employs a "Ordered-Logit." There's a full expressive model definition in the chapter notes, but the basic idea is that you have a cumulative logit link for each category.
+
+__12E3.__
+
+>When count data are zero-inflated, using a model that ignores zero-inflation will tend to induce which kind of inferential error?
+
+A model that ignores zero-inflation will under-represent the number of 0's. If fitting the same data without the secondary, 0-generating process, the model will assume the standard generating process makes a lot of zeros and will bias it downward, and not account for higher-valued events. By accounting for this, you have a mixture of a zero-generating process and a numeric-generating process.
+
+__12E4.__
+
+>Over-dispersion is common in count data. Give an example of a natural process that might produce over-dispersed counts. Can you also give an example of a process that might produce under-dispersed counts?
+
+Over-dispersion is where variance is more variable than the pure process, which leads to a lot of outliers. This is adjusted for by things like continuous mixture models - e.g. the beta-binomial model where each binomial count observation has its own probability of success. An example of this might be MLB batting averages - each player has their own probability of success, and that would even vary against pitcher, so you'd get each observation with it's own probability.
+
+Under-dispersion is a bit harder to think of, the process would have to be less variable than observed counts - distribution is more tight with smaller tails. I had to look up something here, but draws from a MCMC sampler would be under-disperse due to auto-correlation and drawing sequential samples.
+
+
+
