@@ -1,7 +1,7 @@
 # Chapter 12 - Monsters and Mixtures
 ```{r, include=FALSE}
 library(rethinking)
-#options(mc.cores = parallel::detectCores())
+options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
 
@@ -433,4 +433,130 @@ simplehist( s , xlab="response" )
 
 ## 12.4 - Ordered Categorical Predictors
 
+Now what about ordered predictors? Can also do that, go back to trolley problem and use level of education
 
+```{r}
+library(rethinking)
+data(Trolley)
+d <- Trolley
+levels(d$edu)
+```
+
+8 levels, map to a vector in the correct order
+
+```{r}
+edu_levels <- c( 6 , 1 , 8 , 4 , 7 , 2 , 5 , 3 )
+d$edu_new <- edu_levels[ d$edu ]
+```
+
+Each step has own marginal effect on the outcome, want to infer each effect - need 7 parameters for 8 levels. Add to the model:
+
+$$
+\phi_i = \delta_1 + \text{other linear model terms}
+$$
+
+for $\delta_1$ being the effect by moving from elementary to middle school. Then you chain on $\delta_2$ if finished middle school, so on and so forth until
+
+$$
+\phi_i = \beta_E \sum_{j=1}^{E_i-1}\delta_j + \text{other linear model terms}
+$$
+
+Now we've called $\beta_E$ the maximum sum (1) and $\delta$'s are fractions of it. $E_i$ is completed education level. This also helps define priors. The full model:
+
+\begin{align*}
+  R_i &\sim \text{Ordered-logit}(\phi_i,\kappa)\\
+  \phi_i &= \beta_E \sum_{j=1}^{E_i-1}\delta_j + \beta_A A_I + \beta_I I_i + \beta_C C_i\\
+  \kappa_k &\sim \text{Normal}(0,1.5)\\
+  \beta_A, \beta_I, \beta_C, \beta_E &\sim \text{Normal}(0,1)\\
+  \delta &\sim \text{Dirichlet}(\alpha)
+\end{align*}
+
+The _Dirichlet distribution_ is the multivariate extension of the beta distribution, parameterized by pseudo-counts of observations like the beta, just a long vector of them. Prior used is weak, simulating from it:
+
+```{r,echo=FALSE}
+library(gtools)
+```
+
+```{r}
+set.seed(1805)
+delta <- rdirichlet( 10 , alpha=rep(2,7) )
+#str(delta)
+
+h <- 3
+plot( NULL , xlim=c(1,7) , ylim=c(0,0.4) , xlab="index" , ylab="probability" )
+for ( i in 1:nrow(delta) ) lines( 1:7 , delta[i,] , type="b" ,
+    pch=ifelse(i==h,16,1) , lwd=ifelse(i==h,4,1.5) ,
+    col=ifelse(i==h,"black",col.alpha("black",0.7)) )
+```
+
+10 vectors of 7 probabilities, arbitrary one highlighted to show variation in a single vector. Building the model:
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+dat <- list(
+    R = d$response ,
+    action = d$action,
+    intention = d$intention,
+    contact = d$contact,
+    E = as.integer( d$edu_new ),   # edu_new as an index
+    alpha = rep( 2 , 7 ) )      # delta prior
+
+m12.6 <- ulam(
+    alist(
+        R ~ ordered_logistic( phi , kappa ),
+        phi <- bE*sum( delta_j[1:E] ) + bA*action + bI*intention + bC*contact,
+        kappa ~ normal( 0 , 1.5 ),
+        c(bA,bI,bC,bE) ~ normal( 0 , 1 ),
+        vector[8]: delta_j <<- append_row( 0 , delta ),
+        simplex[7]: delta ~ dirichlet( alpha )
+    ), data=dat , chains=2, cores=2)
+```
+
+Data list contains alpha prior - passed as "data" but really just definition of Dirichlet prior. To sum over $\delta$, contains ```bE*sum( delta_j[1:E])```, then uses <<- to append actual delta vector onto a zero. Last, $\delta$ parameters must sum to one, called a _simplex_, given by stan. This takes a long time, 20 minutes for 4 threads on 4 cores.
+
+Looking at the stan code for that model:
+```{r}
+stancode{m12.6}
+```
+
+```{r}
+precis( m12.6 , depth=2 , omit="kappa" )
+```
+
+Overall association of ```bE``` is negative $\rightarrow$ more educated individuals disapproved more of everything. Association smaller than treatment effects - most educated disapprove by about -0.3, while adding action reduces approval by -0.7, don't think causally yet since not randomized treatment.
+
+Looking at multivariate distribution:
+
+```{r}
+delta_labels <- c("Elem","MidSch","SHS","HSG","SCol","Bach","Mast","Grad")
+pairs( m12.6 , pars="delta" , labels=delta_labels )
+```
+
+All are negatively correlated, result of the sum to 1. Modest effect from all except "Some College" (SCol), which is marginal.
+
+Instructive to compare against a more conventional model with education as a ordinary continuous variable:
+
+```{r}
+dat$edu_norm <- normalize( d$edu_new )
+m12.7 <- ulam(
+    alist(
+        R ~ ordered_logistic( mu , cutpoints ),
+        mu <- bE*edu_norm + bA*action + bI*intention + bC*contact,
+        c(bA,bI,bC,bE) ~ normal( 0 , 1 ),
+        cutpoints ~ normal( 0 , 1.5 )
+    ), data=dat , chains=4 , cores=4 )
+precis( m12.7 )
+```
+
+Very low association from education to rating - effect isn't linear. 
+
+Showed ordered predictors - from a causal perspective we might still have concerns weather association is spurious, since correlated with age, which will go over in the problems for this section
+
+## 12.5 - Summary
+
+This chapter went over generalizations of GLMs. 
+
+- Ordered logisitics, good for categorical outcomes with ordering
+- Zero-inflated models, mixutre models accounting for excess of 0's
+- Over-dispersion models, such as beta-binomial and gamma-Poisson, change shape as a function of a linear model
+
+Next chapter, we generalize even furtehr by doing multilevel modeling.
