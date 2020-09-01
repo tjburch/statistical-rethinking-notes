@@ -1,0 +1,26 @@
+# Chapter 13 - Models With Memory
+```{r, include=FALSE}
+library(rethinking)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+Models forget often - as moving from one cluster (individual, group, etc) to another, they forget about pervious data. We see this in any of the dummy variable models from before.
+
+Robot-cafe problem: wants to estimate waiting time at each of two cafes, starts with prior of 5 minutes, deviation of 1. After the first, observes a wait time of 4 minutes, then moves onto the second - what should the prior be? Represent the population of cafes and learn about that - a parameter for each cafe and parameters to describe the population.
+
+This leads to multilevel models, which learn about populations and thus have "memory." Depending on variation, also pools information across clusters. This leads to several benefits.
+
+1. Improved estimates for repeat sampling
+2. Improved estimates for imbalance in sampling
+3. Estimates of variation
+4. Avoid averaging, retain variation
+
+**When it comes to regression, multilevel regression deserves to be the default approach**.
+
+Some costs - you have to make new assumptions about distributions, but maximum entropy helps with this. Estimation is hard, MCMC helps. Hard to understand because predictions are made at different levels.
+
+Also known as _hierarchical_ or _mixed effects_ models. Parameters are commonly called _random effects_.
+
+## 13.1 - Example Multilevel Tadpoles
+
