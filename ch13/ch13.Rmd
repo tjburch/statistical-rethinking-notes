@@ -24,3 +24,131 @@ Also known as _hierarchical_ or _mixed effects_ models. Parameters are commonly 
 
 ## 13.1 - Example Multilevel Tadpoles
 
+Looking at [tadpole mortality](https://esajournals.onlinelibrary.wiley.com/doi/abs/10.1890/04-0535).
+
+```{r}
+library(rethinking)
+data(reedfrogs)
+d <- reedfrogs
+str(d)
+```
+
+The target is suvival (surv) out of an initial count, density. Each row is a "tank" or experimental environment - a _cluster_variable.
+
+A multilievel model allows unique treatment for each tank while still retaining cross-information. We will use a _varying intercepts_ model, the simplest kind of _varying effects_.
+
+First for comparison, using regularizing priors:
+
+\begin{align*}
+  S_i &\sim \text{Binomial}(N_i, p_i)\\
+  \text{logit}(p_i) &= \alpha_{\text{TANK}[i]}\\
+  \alpha_j &\sim \text{Normal}(0,1.5) \text{   , for  } j=1..48
+\end{align*}
+
+The second line gives unique log-odds for each tank
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+# make the tank cluster variable
+d$tank <- 1:nrow(d)
+
+dat <- list(
+    S = d$surv,
+    N = d$density,
+    tank = d$tank )
+
+# approximate posterior
+m13.1 <- ulam(
+    alist(
+        S ~ dbinom( N , p ) ,
+        logit(p) <- a[tank] ,
+        a[tank] ~ dnorm( 0 , 1.5 )
+    ), data=dat , chains=4 , log_lik=TRUE, cmdstan = TRUE )
+```
+
+
+This gives 48 different inercepts, as we've done before.
+
+Next, we'll do the multilevel model:
+
+\begin{align*}
+  S_i &\sim \text{Binomial}(N_i, p_i)\\
+  \text{logit}(p_i) &= \alpha_{\text{TANK}[i]}\\
+  \alpha_j &\sim \text{Normal}(\bar{\alpha}, \sigma)\\
+  \bar{\alpha} &\sim \text{Normal}(0, 1.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+Line 3 here has changed, now the adaptive prior, with parameters $\bar{\alpha}$, an average, and $\sigma$. This means as a prior, our intercepts start by assuming the average and standard deviations of the population. Note this has two _levels_ - top level is outcome, $S$, next level are its parameters, including $\alpha$, then the following level are the priors of $\alpha$ - these are _hyperparameters_ (parameters of parameters), and priors are _hyperpriors_.
+
+
+```{r,results=FALSE, message=FALSE, warning=FALSE}
+m13.2 <- ulam(
+    alist(
+        S ~ dbinom( N , p ) ,
+        logit(p) <- a[tank] ,
+        a[tank] ~ dnorm( a_bar , sigma ) ,
+        a_bar ~ dnorm( 0 , 1.5 ) ,
+        sigma ~ dexp( 1 )
+    ), data=dat , chains=4 , log_lik=TRUE ,cmdstan = TRUE)
+```
+
+This provides 50 parameters - one for each tank plus two hyperparameters.
+
+```{r}
+compare(m13.1, m13.2)
+````
+
+The multilevel model here has only ~21 effective parameters - prior assigned to each intercept shrinks them toward the mean $\bar{alpha}$. This is a _regularizing prior_, similar to other chapters, but the regularization _is learned from data_. The effective parameters are lower than the non-multilevel model, despite more actual parameters, because the adaptive regularization is more aggressive.
+
+```{r}
+# extract Stan samples
+post <- extract.samples(m13.2)
+
+# compute mean intercept for each tank
+# also transform to probability with logistic
+d$propsurv.est <- logistic( apply( post$a , 2 , mean ) )
+
+# display raw proportions surviving in each tank
+plot( d$propsurv , ylim=c(0,1) , pch=16 , xaxt="n" ,
+    xlab="tank" , ylab="proportion survival" , col=rangi2 )
+axis( 1 , at=c(1,16,32,48) , labels=c(1,16,32,48) )
+
+# overlay posterior means
+points( d$propsurv.est )
+
+# mark posterior mean probability across tanks
+abline( h=mean(inv_logit(post$a_bar)) , lty=2 )
+
+# draw vertical dividers between tank densities
+abline( v=16.5 , lwd=0.5 )
+abline( v=32.5 , lwd=0.5 )
+text( 8 , 0 , "small tanks" )
+text( 16+8 , 0 , "medium tanks" )
+text( 32+8 , 0 , "large tanks" )
+```
+
+Blue points are raw proportions from observed counts, black are the varying intercept medians. The 80% line is estimated median survival proportion in population of tanks, vertical lines are inital tadpole counts (10, 25, 35 left to right).
+
+Multilevel estimates are closer to 80% median than raw empirical estimate - this is called _shrinkage_, resutling from regularization. More prevalent for smaller population tanks (left). Shinkage is also stronger the further from the global average.
+
+This is a result of _pooling_ - each tank provides information that can be used to improve estimation of other tanks.
+
+Survival distribution:
+
+```{r}
+# show first 100 populations in the posterior
+plot( NULL , xlim=c(-3,4) , ylim=c(0,0.35) ,
+    xlab="log-odds survive" , ylab="Density" )
+for ( i in 1:100 )
+    curve( dnorm(x,post$a_bar[i],post$sigma[i]) , add=TRUE ,
+    col=col.alpha("black",0.2) )
+
+# sample 8000 imaginary tanks from the posterior distribution
+sim_tanks <- rnorm( 8000 , post$a_bar , post$sigma )
+
+# transform to probability and visualize
+dens( inv_logit(sim_tanks) , lwd=2 , adj=0.1 )
+```
+
+## 13.2 - Varying Effects and the Underfitting/Overfitting Trade-Off
+
