@@ -31,5 +31,36 @@ Over-dispersion is where variance is more variable than the pure process, which 
 
 Under-dispersion is a bit harder to think of, the process would have to be less variable than observed counts - distribution is more tight with smaller tails. I had to look up something here, but draws from a MCMC sampler would be under-disperse due to auto-correlation and drawing sequential samples.
 
+__12M1.__
+
+>At a certain university, employees are annually rated from 1 to 4 on their productivity, with 1 being least productive and 4 most productive. In a certain department at this certain university in a certain year, the numbers of employees receiving each rating were (from 1 to 4): 12, 36, 7, 41. Compute the log cumulative odds of each rating.
+
+```{r}
+# proportion
+responses <- c(12,36,7,41)
+proportion_response <- responses / sum(responses)
+cumulative_sum <- cumsum(proportion_response)
+logit <- function(x) log(x/(1-x))
+round(log_cumulative_odds <- logit(cumulative_sum),2)
+```
+
+
+__12M2.__ 
+
+>Make a version of Figure 12.5 for the employee ratings data given just above.
+
+Figure 12.5 shows cumulative proportion vs response
+
+```{r}
+plot(1:length(cumulative_sum), cumulative_sum, type="b", xlab="Response", ylab="Cumulative Proportion", ylim=c(0,1))
+```
+
+
+__12M3.__
+
+>Can you modify the derivation of the zero-inflated Poisson distribution (ZIPoisson) from the chapter to construct a zero-inflated binomial distribution?
+
+TODO
+
 
 
