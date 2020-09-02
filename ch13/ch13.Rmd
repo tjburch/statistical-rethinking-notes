@@ -152,3 +152,126 @@ dens( inv_logit(sim_tanks) , lwd=2 , adj=0.1 )
 
 ## 13.2 - Varying Effects and the Underfitting/Overfitting Trade-Off
 
+Varying intercepts are adaptively regularized estimates - a major benefit is that they provide more accurate estimates of the individual intercepts, and also the means. The reason is in the under/overfitting tradeoff.
+
+To understand consider:
+
+1. Complete pooling - population of ponds is invariant; common intercept for all. This will use a lot of data for the $\alpha$ estimate, but unlikely to match any particular pond, as a result underfits.
+2. No pooling - each model is unique and provides no information about others. Little data for each estimate, and overfit to the data. Errors are high and possibly infinite due to overfitting.
+3. Partial pooling - adaptive regularizing prior. Less underfit than grand mean, less overfit than no-pooling
+
+Important here though to simulate data to really understand the model - rest of this section.
+
+### The model
+
+\begin{align*}
+  S_i &\sim \text{Binomial}(N_i, p_i)\\
+  \text{logit}(p_i) &= \alpha_{\text{TANK}[i]}\\
+  \alpha_j &\sim \text{Normal}(\bar{\alpha}, \sigma)\\
+  \bar{\alpha} &\sim \text{Normal}(0, 1.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+Same as before (verbage changes from tanks to ponds in chapter).
+
+Simulation needs 
+- $\bar{\alpha}$, average log-odds of survival in entire population
+- $\sigma$, standard deviation of the distribution of log-odds of survival
+- $\alpha$, vector of individual pond intercepts
+- $N_i$, sample size for each pond
+
+### Assign values to paramters
+
+```{r}
+# Initalize values
+a_bar <- 1.5
+sigma <- 1.5
+nponds <- 60
+Ni <- as.integer( rep( c(5,10,25,35) , each=15 ) )
+
+# Simulate sample and put in dataframe
+set.seed(5005)
+a_pond <- rnorm( nponds , mean=a_bar , sd=sigma )
+dsim <- data.frame( pond=1:nponds , Ni=Ni , true_a=a_pond )
+
+```
+
+
+### Simulate survivors
+
+Probability of survival is implied by logit definition:
+
+$$
+  p_i = \frac{ \exp(\alpha_i)}{1+\exp(\alpha_i)}
+$$
+
+```{r}
+# Generate simulated survival count
+dsim$Si <- rbinom( nponds , prob=logistic(dsim$true_a) , size=dsim$Ni )
+```
+
+### Compute non-pooling estimates
+
+Pretty straightforward
+
+```{r}
+dsim$p_nopool <- dsim$Si / dsim$Ni
+```
+
+
+### Compute partial-pooling estimates
+
+
+```{r,results=FALSE, message=FALSE, warning=FALSE}
+dat <- list( Si=dsim$Si , Ni=dsim$Ni , pond=dsim$pond )
+m13.3 <- ulam(
+    alist(
+        Si ~ dbinom( Ni , p ),
+        logit(p) <- a_pond[pond],
+        a_pond[pond] ~ dnorm( a_bar , sigma ),
+        a_bar ~ dnorm( 0 , 1.5 ),
+        sigma ~ dexp( 1 )
+    ), data=dat , chains=4 , cmdstan = TRUE)
+```
+
+```
+precis( m13.3 , depth=2 )
+```
+Will give a long table of intercepts. Add this to the dataframe
+
+```{r}
+# Partial pooling predictions
+post <- extract.samples( m13.3 )
+dsim$p_partpool <- apply( inv_logit(post$a_pond) , 2 , mean )
+
+# True survival probabilities
+dsim$p_true <- inv_logit( dsim$true_a )
+
+# Errors
+nopool_error <- abs( dsim$p_nopool - dsim$p_true )
+partpool_error <- abs( dsim$p_partpool - dsim$p_true )
+```
+
+And finally plotting our simulation
+
+```{r}
+plot( 1:60 , nopool_error , xlab="pond" , ylab="absolute error" ,
+    col=rangi2 , pch=16 )
+points( 1:60 , partpool_error )
+```
+
+With error rates given by:
+
+```{r}
+nopool_avg <- aggregate(nopool_error,list(dsim$Ni),mean)
+partpool_avg <- aggregate(partpool_error,list(dsim$Ni),mean)
+```
+
+
+both are more accurate for larget ponds, as you would expect. Varying effects really have the stronger advantage at the left side of the plot due to the partial pooling. It isn't always better, just on average in the long run.
+
+This is a manifestation of the fact earlier that small ponds shrink more toward the mean.
+
+## 13.3 - More than one type of cluster
+
+
