@@ -5,7 +5,7 @@ options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
 
-Models forget often - as moving from one cluster (individual, group, etc) to another, they forget about pervious data. We see this in any of the dummy variable models from before.
+Models forget often - as moving from one cluster (individual, group, etc) to another, they forget about previous data. We see this in any of the dummy variable models from before.
 
 Robot-cafe problem: wants to estimate waiting time at each of two cafes, starts with prior of 5 minutes, deviation of 1. After the first, observes a wait time of 4 minutes, then moves onto the second - what should the prior be? Represent the population of cafes and learn about that - a parameter for each cafe and parameters to describe the population.
 
@@ -33,7 +33,7 @@ d <- reedfrogs
 str(d)
 ```
 
-The target is suvival (surv) out of an initial count, density. Each row is a "tank" or experimental environment - a _cluster_variable.
+The target is survival (surv) out of an initial count, density. Each row is a "tank" or experimental environment - a _cluster_variable.
 
 A multilievel model allows unique treatment for each tank while still retaining cross-information. We will use a _varying intercepts_ model, the simplest kind of _varying effects_.
 
@@ -66,7 +66,7 @@ m13.1 <- ulam(
 ```
 
 
-This gives 48 different inercepts, as we've done before.
+This gives 48 different intercepts, as we've done before.
 
 Next, we'll do the multilevel model:
 
@@ -127,9 +127,9 @@ text( 16+8 , 0 , "medium tanks" )
 text( 32+8 , 0 , "large tanks" )
 ```
 
-Blue points are raw proportions from observed counts, black are the varying intercept medians. The 80% line is estimated median survival proportion in population of tanks, vertical lines are inital tadpole counts (10, 25, 35 left to right).
+Blue points are raw proportions from observed counts, black are the varying intercept medians. The 80% line is estimated median survival proportion in population of tanks, vertical lines are initial tadpole counts (10, 25, 35 left to right).
 
-Multilevel estimates are closer to 80% median than raw empirical estimate - this is called _shrinkage_, resutling from regularization. More prevalent for smaller population tanks (left). Shinkage is also stronger the further from the global average.
+Multilevel estimates are closer to 80% median than raw empirical estimate - this is called _shrinkage_, resulting from regularization. More prevalent for smaller population tanks (left). Shrinkage is also stronger the further from the global average.
 
 This is a result of _pooling_ - each tank provides information that can be used to improve estimation of other tanks.
 
@@ -152,7 +152,7 @@ dens( inv_logit(sim_tanks) , lwd=2 , adj=0.1 )
 
 ## 13.2 - Varying Effects and the Underfitting/Overfitting Trade-Off
 
-Varying intercepts are adaptively regularized estimates - a major benefit is that they provide more accurate estimates of the individual intercepts, and also the means. The reason is in the under/overfitting tradeoff.
+Varying intercepts are adaptively regularized estimates - a major benefit is that they provide more accurate estimates of the individual intercepts, and also the means. The reason is in the under/overfitting trade-off.
 
 To understand consider:
 
@@ -180,7 +180,7 @@ Simulation needs
 - $\alpha$, vector of individual pond intercepts
 - $N_i$, sample size for each pond
 
-### Assign values to paramters
+### Assign values to parameters
 
 ```{r}
 # Initalize values
@@ -268,10 +268,115 @@ partpool_avg <- aggregate(partpool_error,list(dsim$Ni),mean)
 ```
 
 
-both are more accurate for larget ponds, as you would expect. Varying effects really have the stronger advantage at the left side of the plot due to the partial pooling. It isn't always better, just on average in the long run.
+both are more accurate for larger ponds, as you would expect. Varying effects really have the stronger advantage at the left side of the plot due to the partial pooling. It isn't always better, just on average in the long run.
 
 This is a manifestation of the fact earlier that small ponds shrink more toward the mean.
 
 ## 13.3 - More than one type of cluster
 
+Often can and should use multiple types of clusters in one model
 
+Go back to Chimpanzee example - each pull belongs to both an ```actor``` (index 1-7) and an experimental ```block``` that occurred on the same day.
+
+_Cross-classified_ multilevel model - actors are not nested within unique blocks. If all pulls are on the same day, it would be instead _hierarchical_.
+
+### Multilevel Chimpanzees
+
+Adding varying intercepts to previous model - replace fixed regularizing prior to adaptive. Also add a second cluster type for block:
+
+\begin{align*}
+  L_i &\sim \text{Binomial}(1, p_i)\\
+  \text{Logit}(p_i) &=  \alpha_{\text{ACTOR}[i]} + \gamma_{\text{BLOCK}[i]} + \Beta_{\text{TREATMENT}[i]}\\
+  \beta_j &\sim \text{Normal}(0,0.5) \text{   , for  } j =1..4\\
+  \alpha_j &\sim \text{Normal}(\bar{\alpha},\sigma_\alpha) \text{   , for  } j =1..7\\
+  \gamma_j &\sim \text{Normal}(0,\sigma_\gamma) \text{   , for  } j =1..6\\
+  \bar{\alpha} &\sim \text{Normal}(0,1.5)\\
+  \sigma_\alpha &\sim \text{Exponential}(1)\\
+  \sigma_\gamma &\sim \text{Exponential}(1)\\
+\end{align*}
+
+Each cluster has its own vector of parameters
+
+- Actors, $\alpha$, length 7
+- Blocks, $\gamma$, length 6
+
+Each needs own standard deviation that adapts the amount of pooling across units, $\sigma_\alpha$ and $\sigma_\gamma$.
+
+Unable to identify a separate mean for each varying intercept type since both are added to the same linear prediction, so there is only one global mean $\bar{\alpha}$.
+
+Putting the model into code:
+
+```{r,results=FALSE, message=FALSE, warning=FALSE}
+library(rethinking)
+data(chimpanzees)
+d <- chimpanzees
+d$treatment <- 1 + d$prosoc_left + 2*d$condition
+
+dat_list <- list(
+    pulled_left = d$pulled_left,
+    actor = d$actor,
+    block_id = d$block,
+    treatment = as.integer(d$treatment) )
+
+set.seed(13)
+m13.4 <- ulam(
+    alist(
+        pulled_left ~ dbinom( 1 , p ) ,
+        logit(p) <- a[actor] + g[block_id] + b[treatment] ,
+        b[treatment] ~ dnorm( 0 , 0.5 ),
+      ## adaptive priors
+        a[actor] ~ dnorm( a_bar , sigma_a ),
+        g[block_id] ~ dnorm( 0 , sigma_g ),
+      ## hyper-priors
+        a_bar ~ dnorm( 0 , 1.5 ),
+        sigma_a ~ dexp(1),
+        sigma_g ~ dexp(1)
+    ) , data=dat_list , chains=4 , cores=4 , log_lik=TRUE, cmdstan = TRUE)
+```
+
+Looking at the raw stan code:
+
+```{r}
+stancode(m13.4)
+```
+
+And the outputs:
+
+```{r}
+precis( m13.4 , depth=1 )
+plot( precis(m13.4,depth=1) ) # also plot
+```
+
+For whatever reason, depth 2 gives me a lot more parameters than the book; I've suppressed them. Some things I should note on that:
+
+- ```n_eff``` varies a lot across parameters, common in complex models. Also a result of inefficient  sampling, covered in next section
+- Comparing ```sigma_a``` to ```sigma_g``` gives a lot larger variation among actors (a) than across blocks (g). This tells us that adding blocks doesn't risk overfitting too much
+
+Making a model specifically that ignores block and comparing:
+
+```{r}
+set.seed(14)
+m13.5 <- ulam(
+    alist(
+        pulled_left ~ dbinom( 1 , p ) ,
+        logit(p) <- a[actor] + b[treatment] ,
+        b[treatment] ~ dnorm( 0 , 0.5 ),
+        a[actor] ~ dnorm( a_bar , sigma_a ),
+        a_bar ~ dnorm( 0 , 1.5 ),
+        sigma_a ~ dexp(1)
+    ) , data=dat_list , chains=4 , cores=4 , log_lik=TRUE )
+
+compare( m13.4 , m13.5 )
+```
+
+Model 13.4 has 7 more true parameters but only 2 more effective parameters since the 6 block (g) parameters shrunk toward 0.
+
+"Selecting" model here isn't the aim, the information we get is by comparing the two - including block basically doesn't matter, which we can see from ```sigma_g``` and ```g```. Model _comparison_ is the interesting thing, experimental design tells us the relevant causal model to inspect.
+
+### Even more clusters
+
+Might consider treatment effects look like ```a``` and ```g``` parameters - could we use partial pooling? Sure (Apparently though there's some push-back, traditional teaching is that varying effects are used for not-experimentally controlled variables. Treatment is "fixed" so use "fixed" effects). Use varying effects because they provide better inferences _regardless of how clusters arise_.  If units are _exchangeable_, meaning index values could be reassigned without changing meaning, then partial pooling can help.
+
+In our case, 4 treatments with large data on each, so partial pooling doesn't help much.
+
+## 13.4 - Divergent Transitions and Non-Centered Priors
