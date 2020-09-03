@@ -286,7 +286,7 @@ Adding varying intercepts to previous model - replace fixed regularizing prior t
 
 \begin{align*}
   L_i &\sim \text{Binomial}(1, p_i)\\
-  \text{Logit}(p_i) &=  \alpha_{\text{ACTOR}[i]} + \gamma_{\text{BLOCK}[i]} + \Beta_{\text{TREATMENT}[i]}\\
+  \text{Logit}(p_i) &=  \alpha_{\text{ACTOR}[i]} + \gamma_{\text{BLOCK}[i]} + \beta_{\text{TREATMENT}[i]}\\
   \beta_j &\sim \text{Normal}(0,0.5) \text{   , for  } j =1..4\\
   \alpha_j &\sim \text{Normal}(\bar{\alpha},\sigma_\alpha) \text{   , for  } j =1..7\\
   \gamma_j &\sim \text{Normal}(0,\sigma_\gamma) \text{   , for  } j =1..6\\
@@ -380,3 +380,126 @@ Might consider treatment effects look like ```a``` and ```g``` parameters - coul
 In our case, 4 treatments with large data on each, so partial pooling doesn't help much.
 
 ## 13.4 - Divergent Transitions and Non-Centered Priors
+
+Stan models in this chapter have reported _divergent transitions_, here we'll discuss them more. Leverages physics, if conservation of energy is violated, called divergence and rejected, however make things less efficient.
+
+Two tricks - one is to tune it so it doesn't overshoot the boundaries, the other is _reparameterization_.
+
+### The Devil's Funnel
+
+Simple models can cause divergence, e.g.
+
+\begin{align*}
+  \nu &\sim \text{Normal}(0,3)\\
+  x &\sim \text{Normal}(0,\exp(\nu))
+\end{align*}
+
+Should be easy but ends up being a disaster:
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+m13.7 <- ulam(
+    alist(
+        v ~ normal(0,3),
+        x ~ normal(0,exp(v))
+    ), data=list(N=1) , chains=4 , cmdstan=TRUE)
+precis( m13.7 )
+```
+
+Rhat and n_eff are atrocious. 
+
+This happens because for low values of $\nu$, you get a steep Hamiltonian valley. If steps are too big, simulation overshoots. Fix by reparameterizing.
+
+In our case, it's a _centered parameterization_, since one distribution is conditional on another parameter. The solution is to do a _non-centered parameterization_:
+
+\begin{align*}
+  \nu &\sim \text{Normal}(0,3)\\
+  z &\sim \text{Normal}(0,1)\\
+  x &= z \exp(\nu)
+\end{align*}
+
+This basically defines $z$ as the standardized $x$ - think back to when we standardize variables by making the mean 0 and standard deviation 1; this is that in reverse (just mean 0). This makes the markov chain easier because we sample $z$.
+
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+m13.7nc <- ulam(
+    alist(
+        v ~ normal(0,3),
+        z ~ normal(0,1),
+        gq> real[1]:x <<- z*exp(v)
+    ), data=list(N=1) , chains=4 , cmdstan = TRUE)
+precis( m13.7nc )
+```
+
+Much nicer.
+
+### Non-cenetered Chimpanzees
+
+We had divergences in the chimpanzee model, we can try to fix that.
+
+One quick thing to try to fix it rather than jumping to reparameterizing is to increase acceptance, alter ```adapt_delta```. Default is 0.95, up to 0.99. This is a more accurate approximation of the search survace, but slower exploration.
+
+```
+set.seed(13)
+m13.4b <- ulam( m13.4 , chains=4 , cores=4 , control=list(adapt_delta=0.99) )
+divergent(m13.4b)
+```
+
+This should help, unfortunately some package-management issues in Rethinking.
+
+Can do even better with non-centered model. Two adaptive priors to transform - we add a standardized intercept for both
+
+\begin{align*}
+  L_i &\sim \text{Binomial}(1, p_i)\\
+  \text{Logit}(p_i) &= \bar{\alpha} + \z{\text{ACTOR}[i]}\sigma_\alpha + \x_{\text{BLOCK}[i]}\sigma_\gamma + \beta_{\text{TREATMENT}[i]}\\
+  \beta_j &\sim \text{Normal}(0,0.5) \text{   , for  } j =1..4\\
+  z_j &\sim \text{Normal}(0,1)
+  x_j &\sim \text{Normal}(0,1)
+  \bar{\alpha} &\sim \text{Normal}(0,1.5)\\
+  \sigma_\alpha &\sim \text{Exponential}(1)\\
+  \sigma_\gamma &\sim \text{Exponential}(1)\\
+\end{align*}
+
+Line 2 we replace $\alpha$ and $\gamma$ with our standardized variables times their standard deviations plus the mean. The new standardized variables are in lines 4 and 5.
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+set.seed(13)
+m13.4nc <- ulam(
+    alist(
+        pulled_left ~ dbinom( 1 , p ) ,
+        logit(p) <- a_bar + z[actor]*sigma_a + # actor intercepts
+                    x[block_id]*sigma_g +      # block intercepts
+                    b[treatment] ,
+        b[treatment] ~ dnorm( 0 , 0.5 ),
+        z[actor] ~ dnorm( 0 , 1 ),
+        x[block_id] ~ dnorm( 0 , 1 ),
+        a_bar ~ dnorm( 0 , 1.5 ),
+        sigma_a ~ dexp(1),
+        sigma_g ~ dexp(1),
+        gq> vector[actor]:a <<- a_bar + z*sigma_a,
+        gq> vector[block_id]:g <<- x*sigma_g
+    ) , data=dat_list , chains=4 , cores=4 , cmdstan = TRUE)
+```
+
+Compare and plot the n_eff against each other:
+
+```{r}
+precis_c <- precis( m13.4 , depth=2 )
+precis_nc <- precis( m13.4nc , depth=2 )
+pars <- c( paste("a[",1:7,"]",sep="") , paste("g[",1:6,"]",sep="") ,
+           paste("b[",1:4,"]",sep="") , "a_bar" , "sigma_a" , "sigma_g" )
+neff_table <- cbind( precis_c[pars,"n_eff"] , precis_nc[pars,"n_eff"] )
+plot( neff_table , xlim=range(neff_table) , ylim=range(neff_table) ,
+    xlab="n_eff (centered)" , ylab="n_eff (non-centered)" , lwd=2 )
+abline( a=0 , b=1 , lty=2 )
+```
+
+Non-centered form is better with low-variation clusters or large units in a cluster but not much data in each unit.
+
+Others can be reparameterized, exponential:
+
+\begin{align*}
+  x &= z\lambda\\
+  z &\sim \text{Exponential}(1)
+\end{align*}
+
+## 13.5 - Multilevel Posterior Predictions
