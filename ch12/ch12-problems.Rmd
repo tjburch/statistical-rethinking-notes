@@ -62,5 +62,140 @@ __12M3.__
 
 TODO
 
+__12H1.__
+
+> In 2014, a paper was published that was entitled “Female hurricanes are deadlier than male hurricanes.”184 As the title suggests, the paper claimed that hurricanes with female names have caused greater loss of life, and the explanation given is that people unconsciously rate female hurricanes as less dangerous and so are less likely to evacuate.
+
+>Statisticians severely criticized the paper after publication. Here, you’ll explore the complete data used in the paper and consider the hypothesis that hurricanes with female names are deadlier. Load the data with:
+
+```{r}
+library(rethinking)
+data(Hurricanes)
+```
+
+>In this problem, you’ll focus on predicting deaths using femininity of each hurricane’s name. Fit and interpret the simplest possible model, a Poisson model of deaths using femininity as a predictor. You can use map or map2stan. Compare the model to an intercept-only Poisson model of deaths. How strong is the association between femininity of name and deaths? Which storms does the model fit (retrodict) well? Which storms does it fit poorly?
+
+```{r}
+dat <- Hurricanes
+
+# Intercept only
+intercept_m12h1 <- map(
+  alist(
+    deaths ~ dpois(lambda1),
+    log(lambda1) ~ a,
+    a ~ dnorm(0,1)
+  ), 
+  data=dat 
+)
+
+# Femininity as predictor
+femininity_m12h1 <- map(
+    alist(
+      deaths ~ dpois(lambda1),
+      log(lambda1) ~ a + b * femininity,
+      a ~ dnorm(0,2),
+      b ~ dnorm(0,2)
+    ), data=dat)
+```
+
+```{r}
+compare(intercept_m12h1, femininity_m12h1)
+```
+
+The model incorporating femininity does somewhat better by WAIC, but has way more effective number of parameters. Difference is covered by standard error so cannot definitively say.
+
+```{r}
+  precis(femininity_m12h1)
+```
+
+Appears to have some non-zero association, $0.07 \pm 0.01$.
+
+```{r, fig.height=2, fig.align="center"}
+posterior_sample <- extract.samples(femininity_m12h1)
+dens(posterior_sample$b)
+```
+
+```{r, fig.align="center"}
+postcheck(femininity_m12h1,window=92)
+```
+
+Looks like it fits well only around the average of the sample. Anything below or above is shot. Many 0 counts that are that are ignored.
+
+I saw another solution online that used a counter-factual plot, so let's try that
+```{r, fig.align="center"}
+dat.predict <- data.frame(femininity=seq(1,11,0.1))
+lambda.sample <- link(femininity_m12h1, dat.predict)
+lambda.avg <- apply(lambda.sample, 2, mean )
+lambda.pi <- apply(lambda.sample, 2, PI )
+
+# predict counts
+count.sample <- sim(femininity_m12h1, data = dat.predict)
+count.avg <- apply(count.sample, 2, mean )
+count.pi <- apply(count.sample, 2, PI )
+
+#plot
+plot(dat$femininity, dat$deaths, xlim=c(0,12),ylim=c(0,125), col='cornflowerblue', pch=16,
+     xlab="Femininity", ylab="Deaths")
+lines(dat.predict$femininity, lambda.avg)
+shade(lambda.pi, dat.predict$femininity)
+
+lines(dat.predict$femininity, count.avg, col='red')
+shade(count.pi, dat.predict$femininity)
+```
+
+Apparently this model is very confident that there's only between 10-35 deaths and that it rises with Femininity. This is very incongruent with the data, particularly lying below the model's predictions.
+
+__12H2.__
+
+>Counts are nearly always over-dispersed relative to Poisson. So fit a gamma-Poisson (aka negative-binomial) model to predict deaths using femininity. Show that the over-dispersed model no longer shows as precise a positive association between femininity and deaths, with an 89% interval that overlaps zero. Can you explain why the association diminished in strength?
 
 
+```{r}
+femininity_m12h2 <- map(
+    alist(
+        deaths ~ dgampois( lambda , phi ),
+        log(lambda) ~ a + b * femininity,
+        a ~ dnorm(0,2),
+        b ~ dnorm(0,2),
+        phi ~ dexp(1)
+    ), 
+    data=dat
+)
+```
+
+```{r}
+precis(femininity_m12h2)
+```
+
+The association with b is now consistent with 0 ($0.01 \pm 0.03$).
+
+The zero-inflated model now covers Hurricanes in which there are no deaths. It's overdispersed, this should widen the prediction ranges.
+
+```{r, fig.align="center"}
+postcheck(femininity_m12h2,window=92)
+```
+
+As suspected, they're much wider, however still don't cover extreme events. Revisiting the counter-factual:
+
+```{r, fig.align="center"}
+dat.predict <- data.frame(femininity=seq(1,11,0.1))
+
+lambda.sample <- link(femininity_m12h2, dat.predict)
+lambda.avg <- apply(lambda.sample, 2, mean )
+lambda.pi <- apply(lambda.sample, 2, PI )
+
+# predict counts
+count.sample <- sim(femininity_m12h2, data = dat.predict)
+count.avg <- apply(count.sample, 2, mean )
+count.pi <- apply(count.sample, 2, PI )
+
+#plot
+plot(dat$femininity, dat$deaths, xlim=c(0,12),ylim=c(0,125), col='cornflowerblue', pch=16, xlab="Femininity", ylab="Deaths")
+lines(dat.predict$femininity, lambda.avg)
+shade(lambda.pi, dat.predict$femininity)
+
+lines(dat.predict$femininity, count.avg, col='red')
+shade(count.pi, dat.predict$femininity)
+```
+
+Model now shows far less certainty. Data coverage is far, far better, covering all the zero values. Still misses extremely high death events. MAP is flat with femininity now.
