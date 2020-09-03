@@ -391,7 +391,7 @@ m12.5 <- ulam(
         BI <- bI + bIA*A + bIC*C ,
         c(bA,bI,bC,bIA,bIC) ~ dnorm( 0 , 0.5 ),
         cutpoints ~ dnorm( 0 , 1.5 )
-    ) , data=dat , chains=4 , cores=4 )
+    ) , data=dat , chains=4 , cores=4, cmdstan = TRUE )
 
 plot( precis(m12.5) , xlim=c(-1.4,0) )
 ```
@@ -508,7 +508,7 @@ m12.6 <- ulam(
         c(bA,bI,bC,bE) ~ normal( 0 , 1 ),
         vector[8]: delta_j <<- append_row( 0 , delta ),
         simplex[7]: delta ~ dirichlet( alpha )
-    ), data=dat , chains=2, cores=2)
+    ), data=dat , chains=2, cores=2, cmdstan = TRUE)
 ```
 
 Data list contains alpha prior - passed as "data" but really just definition of Dirichlet prior. To sum over $\delta$, contains ```bE*sum( delta_j[1:E])```, then uses <<- to append actual delta vector onto a zero. Last, $\delta$ parameters must sum to one, called a _simplex_, given by stan. This takes a long time, 20 minutes for 4 threads on 4 cores.
@@ -543,7 +543,7 @@ m12.7 <- ulam(
         mu <- bE*edu_norm + bA*action + bI*intention + bC*contact,
         c(bA,bI,bC,bE) ~ normal( 0 , 1 ),
         cutpoints ~ normal( 0 , 1.5 )
-    ), data=dat , chains=4 , cores=4 )
+    ), data=dat , chains=4 , cores=4 , cmdstan = TRUE)
 precis( m12.7 )
 ```
 
