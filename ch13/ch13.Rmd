@@ -417,7 +417,7 @@ In our case, it's a _centered parameterization_, since one distribution is condi
   x &= z \exp(\nu)
 \end{align*}
 
-This basically defines $z$ as the standardized $x$ - think back to when we standardize variables by making the mean 0 and standard deviation 1; this is that in reverse (just mean 0). This makes the markov chain easier because we sample $z$.
+This basically defines $z$ as the standardized $x$ - think back to when we standardize variables by making the mean 0 and standard deviation 1; this is that in reverse (just mean 0). This makes the Markov chain easier because we sample $z$.
 
 
 ```{r, results=FALSE, message=FALSE, warning=FALSE}
@@ -432,11 +432,11 @@ precis( m13.7nc )
 
 Much nicer.
 
-### Non-cenetered Chimpanzees
+### Non-centered Chimpanzees
 
 We had divergences in the chimpanzee model, we can try to fix that.
 
-One quick thing to try to fix it rather than jumping to reparameterizing is to increase acceptance, alter ```adapt_delta```. Default is 0.95, up to 0.99. This is a more accurate approximation of the search survace, but slower exploration.
+One quick thing to try to fix it rather than jumping to reparameterizing is to increase acceptance, alter ```adapt_delta```. Default is 0.95, up to 0.99. This is a more accurate approximation of the search surface, but slower exploration.
 
 ```
 set.seed(13)
@@ -503,3 +503,133 @@ Others can be reparameterized, exponential:
 \end{align*}
 
 ## 13.5 - Multilevel Posterior Predictions
+
+Going to reiterate the importance of model checking and information criterion, now for multilevel models
+
+### Posterior Prediction for the Same Clusters
+
+If working with the same clusters, varying intercepts are just parameters, need to make sure you use the right intercept.
+
+Chimpanzee example - 7 unique actors = clusters. Varying intercepts had an intercept for each. We'll construct posteriors using ```link``` and also by hand.
+
+```{r}
+chimp <- 2
+d_pred <- list(
+    actor = rep(chimp,4),
+    treatment = 1:4,
+    block_id = rep(1,4)
+)
+p <- link( m13.4 , data=d_pred )
+p_mu <- apply( p , 2 , mean )
+p_ci <- apply( p , 2 , PI )
+```
+
+Then extract samples
+
+```{r}
+post <- extract.samples(m13.4)
+str(post)
+```
+
+Looking at actor 5 for example,
+
+```{r}
+dens( post$a[,5])
+```
+
+Building a manual link function:
+
+```{r}
+p_link <- function( treatment , actor=1 , block_id=1 ) {
+    logodds <- with( post ,
+        a[,actor] + g[,block_id] + b[,treatment] )
+    return( inv_logit(logodds) )
+}
+```
+
+Computing predictions:
+
+```{r}
+p_raw <- sapply( 1:4 , function(i) p_link( i , actor=2 , block_id=1 ) )
+p_mu <- apply( p_raw , 2 , mean )
+p_ci <- apply( p_raw , 2 , PI )
+```
+
+This is important to know because ```link``` will eventually mess up, you should be able to do by hand. Bayesian models are generative: predictions are made by pushing samples though the model to get distributions of predictions, then summarize the distributions to summarize predictions.
+
+### Posterior prediction for New Clusters
+
+The problem is really generalizing from the sample - there's no unique procedure to do so. Here we'll go over some examples.
+
+Chimpanzee experiment - to guess future populations, the intercepts don't really matter, they're not in the new population. We can use ```a_bar``` and ```sigma_a``` though, because they describe a population of actors, and can then _simulate new actors_.
+
+First, construct for an _average_ actor. Using own link function:
+
+```{r}
+p_link_abar <- function( treatment ){
+  logodds <- with( post, a_bar + b[,treatment])
+  return (inv_logit(logodds))
+}
+```
+
+We ignore block since it will be a new block (assume effect is ~0).
+
+```{r}
+post <- extract.samples(m13.4)
+p_raw <- sapply(1:4, function(i) p_link_abar(i))
+p_mu <- apply( p_raw, 2, mean)
+p_ci <- apply(p_raw, 2, PI)
+
+plot(NULL, xlab="Treatment", ylab="Proportion Pulling Left", ylim=c(0,1), xaxt="n", xlim=c(1,4))
+axis(1, at=1:4, labels=c("R/N","L/N","R/P","L/P"))
+lines( 1:4, p_mu)
+shade(p_ci, 1:4)
+```
+
+This makes the impact of pro-social left obvious, but doesn't show actor-level variation.
+
+To show actor variation, we need ```sigma_a```. We'll simulate a bunch of actors using ```r_norm```.
+
+```{r}
+a_sim <- with( post , rnorm( length(post$a_bar), a_bar, sigma_a))
+p_link_asim <- function ( treatment ) {
+  logodds <- with( post, a_sim + b[,treatment])
+  return(inv_logit(logodds))
+}
+p_raw_asim <- sapply(1:4, function(i) p_link_asim(i))
+```
+
+So which to use? Depends on the question.
+
+- Average is useful to visualize impact of treatment
+- Marginal predictions illustrate how variable chimpanzees are
+
+Make a plot that displays new actors for each treatment:
+
+```{r}
+plot(NULL, xlab="Treatment", ylab="Proportion Pulled Left", ylim=c(0,1), xaxt="n", xlim=c(1,4))
+axis(1, at=1:4, labels=c("R/N","L/N","R/P","L/P"))
+for (i in 1:100) lines(1:4, p_raw_asim[i,], col=grau(0.25), lwd=2)
+```
+
+### Post-Stratification
+
+Word of caution - a common problem is to use a non-representative sample and generate for the full population. E.g. survey voters and extrapolate to full population.
+
+To do better, use _post-stratification_ - fit a model where each demographic slice gets its own predicted voting intention. Then reweight to full population. This is often done with multilevel modeling, called _MRP_ (Mister P).
+
+Suppose demographic estimates $p_i$ for each category $i$, and individuals $N_i$ in each category. Post-stratified prediction is:
+
+$$
+  \frac{ \sum_i N_i p_i}{\sum_i N_i}
+$$
+Doesn't always work, e.g. when selection bias is caused by outcome of interest. A survey $R$ is influenced by age $A$, which influences voting retention $V$ gives us $R \leftarrow A \rightarrow V$. Possible to estimate the influence of $A$ on $V$, but if $V\rightarrow R$, little hope - think if only supporters respond, this is biased. Selection on outcome variable is one of the worst possibilities.
+
+## 13.6 - Summary
+
+Went over the motivation, implementation, and interpretation of basic multilevel models.
+
+Varying intercepts - better estimates of baseline differences because they model population of clusters and use inferences about the population to pool information.
+
+In these, parameters are adaptively regularized, relying on a prior that is learned from data.
+
