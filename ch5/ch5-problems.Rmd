@@ -6,7 +6,8 @@ library(rethinking)
 
 __5E1.__
 
-Which of the linear models below are multiple linear regressions?
+>Which of the linear models below are multiple linear regressions?
+
 1. $\mu_i = \alpha + \beta x_i$
 2. $\mu_i = \beta_x x_i + \beta_z z_i$
 3. $\mu_i = \alpha + \beta_x (x_i - z_i)$
@@ -16,7 +17,7 @@ Which of the linear models below are multiple linear regressions?
 
 __5E2.__
 
-Write down a multiple regression to evaluate the claim: Animal diversity is linearly related to latitude, but only after controlling for plant diversity. You just need to write down the model definition.
+>Write down a multiple regression to evaluate the claim: Animal diversity is linearly related to latitude, but only after controlling for plant diversity. You just need to write down the model definition.
 
 \begin{align*}
   \mu_i &= \alpha + \beta_L L_i + \beta_P P_i\\
@@ -26,7 +27,7 @@ For $P$ plant diversity, $L$ latitude, predicting animal diversity.
 
 __5E3.__
 
-Write down a multiple regression to evaluate the claim: Neither amount of funding nor size of laboratory is by itself a good predictor of time to PhD degree; but together these variables are both positively associated with time to degree. Write down the model definition and indicate which side of zero each slope parameter should be on.
+>Write down a multiple regression to evaluate the claim: Neither amount of funding nor size of laboratory is by itself a good predictor of time to PhD degree; but together these variables are both positively associated with time to degree. Write down the model definition and indicate which side of zero each slope parameter should be on.
 
 \begin{align*}
   \mu_i &= \alpha + \beta_F F_I + \beta_S S_i\\
@@ -36,7 +37,7 @@ For $F$ funding and and $S$ size. Both $\beta$ values will be positive.
 
 __5E4.__
 
-Suppose you have a single categorical predictor with 4 levels (unique values), labeled A, B, C and D. Let Ai be an indicator variable that is 1 where case i is in category A. Also suppose Bi, Ci, and Di for the other categories. Now which of the following linear models are inferentially equivalent ways to include the categorical variable in a regression? Models are inferentially equivalent when it’s possible to compute one posterior distribution from the posterior distribution of another model.
+>Suppose you have a single categorical predictor with 4 levels (unique values), labeled A, B, C and D. Let Ai be an indicator variable that is 1 where case i is in category A. Also suppose Bi, Ci, and Di for the other categories. Now which of the following linear models are inferentially equivalent ways to include the categorical variable in a regression? Models are inferentially equivalent when it’s possible to compute one posterior distribution from the posterior distribution of another model.
 
 1. $\mu_i = \alpha + \beta_A A_i + \beta_B B_i + \beta_D D_i$
 2. $\mu_i = \alpha + \beta_A A_i + \beta_B B_i + \beta_C C_i + \beta_D D_i $
@@ -48,9 +49,124 @@ Models 1 and 3 both have slopes for 3 predictors and an intercept for the fourth
 
 __5M1.__
 
-Invent your own example of a spurious correlation. An outcome variable should be correlated with both predictor variables. But when both predictors are entered in the same model, the correlation between the outcome and one of the predictors should mostly vanish (or at least be greatly reduced).
+>Invent your own example of a spurious correlation. An outcome variable should be correlated with both predictor variables. But when both predictors are entered in the same model, the correlation between the outcome and one of the predictors should mostly vanish (or at least be greatly reduced).
 
 The classic ice cream and murders example - both more prevalent during the summer, so the predictor could be temperature.
 
 
+__5M2.__
+
+>Invent your own example of a masked relationship. An outcome variable should be correlated with both predictor variables, but in opposite directions. And the two predictor variables should be correlated with one another.
+
+TODO
+
+__5M3.__
+
+>It is sometimes observed that the best predictor of fire risk is the presence of firefighters — States and localities with many firefighters also have more fires. Presumably firefighters do not cause fires. Nevertheless, this is not a spurious correlation. Instead fires cause firefighters. Consider the same reversal of causal inference in the context of the divorce and marriage data. How might a high divorce rate cause a higher marriage rate? Can you think of a way to evaluate this relationship, using multiple regression?
+
+A high divorce rate induces a higher marriage rate since divorced people may re-marry. Divorce increases the pool of candidates to be married. If you added a "marriage number" to count if it's a first, second, third, etc. marriage, then it ought to be evaluated in the regression.
+
+
+**Hard**
+>Hard. All three exercises below use the same data, data(foxes) (part of rethinking). The urban fox (Vulpes vulpes) is a successful exploiter of human habitat. Since urban foxes move in packs and defend territories, data on habitat quality and population density is also included. The data frame has five columns:
+
+>(1) group: Number of the social group the individual fox belongs to 
+>(2) avgfood: The average amount of food available in the territory
+>(3) groupsize: The number of foxes in the social group
+>(4) area: Size of the territory
+>(5) weight: Body weight of the individual fox
+
+
+Load and inspect data
+```{r}
+data("foxes")
+dat <- foxes
+head(dat)
+```
+
+__5H1.__
+
+>Fit two bivariate Gaussian regressions, using quap: (1) body weight as a linear function of territory size (area), and (2) body weight as a linear function of groupsize. Plot the results of these regressions, displaying the MAP regression line and the 95% interval of the mean. Is either variable important for predicting fox body weight?
+
+
+1) Body weight as a function of territory size
+
+```{r}
+dat$A <- standardize(dat$area)
+m5.p1_area <- quap(
+  alist(
+    weight ~ dnorm( mu , sigma ) , 
+    mu <- a + bA * A,
+    a ~ dnorm(0, 1),
+    bA ~ dnorm(0, 0.5),
+    sigma ~ dexp(2)
+  ), data=dat
+)
+precis(m5.p1_area)
+```
+
+Seems like not really, mean of standardized area predictor is consistent with 0.
+
+```{r}
+# Get 95% CI
+A.seq <- seq(from=-3,to=3, length.out = 100)
+mu <- link(m5.p1_area, data=data.frame(A=A.seq))
+mu.PI <- apply(mu, 2, PI)
+
+
+plot(weight~A, data=dat, col=rangi2)
+abline(m5.p1_area)
+shade(mu.PI, A.seq)
+```
+
+2) Weight as a function of groupsize
+
+```{r}
+# appears to be a count so won't standardize
+
+m5.p1_group <- quap(
+  alist(
+    weight ~ dnorm( mu , sigma ) , 
+    mu <- a + bG * groupsize,
+    a ~ dnorm(0, 1),
+    bG ~ dnorm(0, 10),
+    sigma ~ dexp(2)
+  ), data=dat
+)
+precis(m5.p1_group)
+```
+
+Also seems like not really a factor - also consistent with 0.
+
+```{r}
+# Get 95% CI
+G.seq <- seq(from=0,to=10, length.out = 100)
+mu <- link(m5.p1_group, data=data.frame(groupsize=G.seq))
+mu.PI <- apply(mu, 2, PI)
+
+
+plot(weight~groupsize, data=dat, col=rangi2)
+abline(m5.p1_area)
+shade(mu.PI, G.seq)
+```
+
+
+
+__5H2.__
+
+>Now fit a multiple linear regression with weight as the outcome and both area and group size as predictor variables. Plot the predictions of the model for each predictor, holding the other predictor constant at its mean. What does this model say about the importance of each variable? Why do you get different results than you got in the exercise just above?
+
+```{r}
+m5.p2 <- quap(
+  alist(
+    weight ~ dnorm( mu , sigma ) , 
+    mu <- a + bG * groupsize + bA * A,
+    a ~ dnorm(0, 1),
+    bG ~ dnorm(0, 10),
+    bA ~ dnorm(0, 0.5),
+    sigma ~ dexp(1)
+  ), data=dat
+)
+precis(m5.p2)
+```
 
