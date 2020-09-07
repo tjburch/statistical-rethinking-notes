@@ -1,0 +1,65 @@
+# Chapter 15 - Missing Data and Other Opportunities
+```{r, include=FALSE}
+library(rethinking)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+An advantage of Bayesian inference is that it gets rid of the need to be clever. Burnt pancake example of conditional probability - think of ways you could be looking at the data (count _sides_ of pancakes), rather than outcome-based (which pancake?). We can also think of BDA as:
+
+$$
+  \Pr (\text{want to know}|\text{already know})
+$$
+
+Probability theory is hard to interpret and apply, often requiring cleverness, but Bayesian approach applies conditional probability - once we define assumptions, probability just does the rest.
+
+This chapter shows two applications of assume-and-deduce strategy - incorporating _measurement error_ and then estimation of missing data through _Bayesian Imputation_. 
+
+## 15.1 - Measurement Error 
+
+Using divorce data. Both divorce variable and marriage rate have standard errors provided
+
+```{r}
+data("WaffleDivorce")
+d<-WaffleDivorce
+head(d)
+```
+
+Shown in the .SE columns. Plotting this,
+
+```{r}
+# points
+plot( d$Divorce ~ d$MedianAgeMarriage , ylim=c(4,15) ,
+    xlab="Median age marriage" , ylab="Divorce rate" )
+
+# standard errors
+for ( i in 1:nrow(d) ) {
+    ci <- d$Divorce[i] + c(-1,1)*d$Divorce.SE[i]
+    x <- d$MedianAgeMarriage[i]
+    lines( c(x,x) , ci )
+}
+```
+
+
+Error varies due to state size. Some states are more confident, so we should weight those higher.
+
+### Error on the Outcome
+
+Think of how we'd generate data, what would we want errors to look like? Decrease as log population increases.
+
+A DAG:
+
+```{r}
+library(dagitty)
+dag <- dagitty("dag{ 
+  A-> M -> D
+  A-> D -> D_obs <- e_D
+  D [unobserved]
+  e_D [unobserved]
+  }")
+coordinates(dag) <- list( x=c(A=0,M=1,D=1,D_obs=2,e_D=3) , y=c(A=1,M=0,D=2,D_obs=2,e_D=2) )
+drawdag(dag)
+```
+
+
+True divorce rate cannot be observed, but we do have a observed divorce rate that's a function of the true divorce rate and the error on it.
