@@ -62,4 +62,195 @@ drawdag(dag)
 ```
 
 
-True divorce rate cannot be observed, but we do have a observed divorce rate that's a function of the true divorce rate and the error on it.
+True divorce rate cannot be observed, but we do have a observed divorce rate that's a function of the true divorce rate and the error on it. Most regressions in general are really looking at $D_{obs}$ as a proxy for $D$.
+
+How to put into a model - like a simulation but in reverse, assign a distribution to observations and draw from it. For examplue, if a measurement is 10 meters with standard Guassian deviation of 2, implies 
+
+$$
+  y \sim \text{Normal}(10,2)
+$$
+
+The key insight - if we don't know the true value, we can put a parameter and let Bayes do the rest.
+
+Going back to divorce rate, we can use the parameter:
+
+$$
+  D_{obs,i} \sim \text{Normal}(D_{true,i},D_{SE,i})
+$$
+
+Full model:
+
+\begin{align*}
+  D_{obs,i} &\sim \text{Normal}(D_{true,i},D_{SE,i})\\
+  D_{true,i} &\sim \text{Normal}(\mu_i, \sigma)\\
+  \mu_i &= \alpha + \beta_A A_i + \beta_M M_i \\
+  \alpha &\sim \text{Normal}(0,0.2)\\
+  \beta_A &\sim \text{Normal}(0,0.5)\\
+  \beta_M &\sim \text{Normal}(0, 0.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+Effectively just a linear regression, but you have a connecting term from observation to true parameter value.
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+dlist <- list(
+    D_obs = standardize( d$Divorce ),
+    D_sd = d$Divorce.SE / sd( d$Divorce ),
+    M = standardize( d$Marriage ),
+    A = standardize( d$MedianAgeMarriage ),
+    N = nrow(d)
+)
+
+m15.1 <- ulam(
+    alist(
+        D_obs ~ dnorm( D_true , D_sd ),
+        vector[N]:D_true ~ dnorm( mu , sigma ),
+        mu <- a + bA*A + bM*M,
+        a ~ dnorm(0,0.2),
+        bA ~ dnorm(0,0.5),
+        bM ~ dnorm(0,0.5),
+        sigma ~ dexp(1)
+    ) , data=dlist , chains=4 , cores=4 , cmdstan=TRUE)
+```
+
+```{r}
+precis(m15.1)
+```
+
+If we consider the posterior means, previously ```bA``` was -1, now it's about half that, but still reliably negative, the error reduced the association - not always the case.
+
+If you plot the previous vs new model, one thing to notice is that the less certain estimates are more susceptible to shrinkage than the more certain ones.
+
+### Error on Both the Outcome and Predictor
+
+If there's error on predictors, the approach is the same.
+
+```{r}
+library(dagitty)
+dag <- dagitty("dag{ 
+  A-> M -> D
+  A-> D -> D_obs <- e_D
+  M -> M_obs <- e_M
+  M [unobserved]
+  e_M [unobserved]
+  D [unobserved]
+  e_D [unobserved]
+  }")
+coordinates(dag) <- list( x=c(A=0,M=1,D=1,D_obs=2,e_D=3,M_obs=2,e_M=3) , y=c(A=1,M=0,D=2,D_obs=2,e_D=2,M_obs=0,e_M=0) )
+drawdag(dag)
+```
+
+With model:
+
+\begin{align*}
+  D_{obs,i} &\sim \text{Normal}(D_{true,i},D_{SE,i})\\
+  D_{true,i} &\sim \text{Normal}(\mu_i, \sigma)\\
+  \mu_i &= \alpha + \beta_A A_i + \beta_M M_{true,i} \\
+  M_{obs,i} &\sim \text{Normal}(M_{true,i}, M_{SE,i})\\
+  M_{true,i} &\sim \text{Normal}(0,1)\\
+  \alpha &\sim \text{Normal}(0,0.2)\\
+  \beta_A &\sim \text{Normal}(0,0.5)\\
+  \beta_M &\sim \text{Normal}(0, 0.5)\\
+  \sigma &\sim \text{Exponential}(1)
+\end{align*}
+
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+dlist <- list(
+    D_obs = standardize( d$Divorce ),
+    D_sd = d$Divorce.SE / sd( d$Divorce ),
+    M_obs = standardize( d$Marriage ),
+    M_sd = d$Marriage.SE / sd( d$Marriage ),
+    A = standardize( d$MedianAgeMarriage ),
+    N = nrow(d)
+)
+
+m15.2 <- ulam(
+    alist(
+        D_obs ~ dnorm( D_true , D_sd ),
+        vector[N]:D_true ~ dnorm( mu , sigma ),
+        mu <- a + bA*A + bM*M_true[i],
+        M_obs ~ dnorm( M_true , M_sd ),
+        vector[N]:M_true ~ dnorm( 0 , 1 ),
+        a ~ dnorm(0,0.2),
+        bA ~ dnorm(0,0.5),
+        bM ~ dnorm(0,0.5),
+        sigma ~ dexp( 1 )
+    ) , data=dlist , chains=4 , cores=4 , cmdstan = TRUE)
+```
+
+```{r}
+precis(m15.2)
+```
+
+Output is pretty similar, but we did get updated estimates of marriage rate.
+
+```{r}
+post <- extract.samples( m15.2 )
+D_true <- apply( post$D_true , 2 , mean )
+M_true <- apply( post$M_true , 2 , mean )
+plot( dlist$M_obs , dlist$D_obs , pch=16 , col=rangi2 ,
+    xlab="marriage rate (std)" , ylab="divorce rate (std)" )
+points( M_true , D_true )
+for ( i in 1:nrow(d) )
+    lines( c( dlist$M_obs[i] , M_true[i] ) , c( dlist$D_obs[i] , D_true[i] ) )
+```
+
+
+The big takeaway - if you have a big distribution of values, don't use a single value for regression, use the distribution.
+
+### Measurement Terrors
+
+Errors can be difficult to manage, especialy if correlated. Imagine for some variable $P$,
+
+```{r}
+dag <- dagitty("dag{ 
+  A-> M -> D
+  A-> D -> D_obs <- e_D
+  M -> M_obs <- e_M
+  e_M <- P -> e_D
+  M [unobserved]
+  e_M [unobserved]
+  D [unobserved]
+  e_D [unobserved]
+  }")
+coordinates(dag) <- list( x=c(A=0,M=1,D=1,D_obs=2,e_D=3,M_obs=2,e_M=3,P=4) , y=c(A=1,M=0,D=2,D_obs=2,e_D=2,M_obs=0,e_M=0, P=1) )
+drawdag(dag)
+```
+
+
+If we regress $D_{obs}$ on $M_{obs}$, there's an open, non-causal path. A possible solution is to model true $D$ and $M$, if we know the measurement process.
+
+There's also the case where one variable influences the error and creates a non-causal path:
+```{r}
+dag <- dagitty("dag{ 
+  A-> M -> D
+  A-> D -> D_obs <- e_D
+  e_D <- M -> M_obs <- e_M
+  M [unobserved]
+  e_M [unobserved]
+  D [unobserved]
+  e_D [unobserved]
+  }")
+coordinates(dag) <- list( x=c(A=0,M=1,D=1,D_obs=2,e_D=3,M_obs=2,e_M=3) , y=c(A=1,M=0,D=2,D_obs=2,e_D=2,M_obs=0,e_M=0) )
+drawdag(dag)
+```
+
+This might happen if marriages are rare, then fewer divorce possibilities, then smaller sample to measure divorce, so ultimately small $M$ induces large $e_D$.
+
+Anther problem is when a causal variable is measured less precisely than a non-causal. Say we know $D$ and $M$ well but $A$ has a lot of error, and no causality between $M$ and $D$:
+
+```{r}
+dag <- dagitty("dag{ 
+  e_A [unobserved]
+  A [unobserved]
+  e_A -> A_obs <- A
+  M <- A -> D
+  }")
+coordinates(dag) <- list( x=c(e_A=0, A_obs=1, A=2, D=3, M=3) , y=c(e_A=1, A_obs=1, A=1, D=2, M=0) )
+drawdag(dag)
+```
+
+Here, a naive regression of $D$ on $A_{obs}$ and $M$ will suggest $M$ influences $D$ - $M$ basically functions as proxy $A$.
+
+## 15.2 - Missing Data
