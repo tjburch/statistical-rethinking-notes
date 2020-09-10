@@ -254,3 +254,83 @@ drawdag(dag)
 Here, a naive regression of $D$ on $A_{obs}$ and $M$ will suggest $M$ influences $D$ - $M$ basically functions as proxy $A$.
 
 ## 15.2 - Missing Data
+
+What to do if data is missing?
+
+Common behavior is to just drop all cases - _Complete Case Analysis_. It wastes data though.
+
+Instead _impute_ missing data. Generative models tell you weather the process that produced missing values will also prevent the identification of causal effects. You can add missing contributions to a DAG too.
+
+Rethinking - Missing data are meaningful: missing values depend on context. If someone omits income on a form, often this may mean a particularly low or high value. In ecology, if you haven't observed a species it might mean it's not there, it also might mean you just haven't seen one. _Occupancy models_ try to take this into account.
+
+### DAG ate my homework
+
+Sample of students who own dogs - produce homework $H_p$, influenced by how much they study $S$. Dogs eat some of the homework ($D$), so we can't see the true distribution, only those returned $H_m$. Can think of several causal scenarios:
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+  S -> H_p -> H_m <-D
+  H_p [unobserved]
+  }")
+coordinates(dag) <- list( x=c(S=0, D=0, H_p=1, H_m=1) , y=c(S=0, D=1, H_p=0, H_m=1) )
+drawdag(dag)
+```
+
+Simplest shown - completely random.
+
+```{r}
+# Simulate 100 students with attributes and homework
+N <- 100
+S <- rnorm( N )
+H <- rbinom( N , size=10 , inv_logit(S) )
+
+# Let dogs randomly eat homework sets
+D <- rbern( N ) # dogs completely random
+Hm <- H # All homework
+Hm[D==1] <- NA # Dropout those eaten as NANs
+```
+
+Are these missing values specifically problematic? Depends - is outcome $H$ independent of $D$? If so, then the missing values don't change the overall distribution in a systematic way. Estimation is less efficient, but doesn't induce a bias.
+
+But what if $S$ influences $D$? More studying causes dogs to want to eat homework.
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+  S -> H_p -> H_m <-D
+  S-> D
+  H_p [unobserved]
+  }")
+coordinates(dag) <- list( x=c(S=0, D=0, H_p=1, H_m=1) , y=c(S=0, D=1, H_p=0, H_m=1) )
+drawdag(dag)
+```
+
+This scenario is far more problematic, students that study more than average have their homeworks eaten more. Backdoor non-causal path from $H_p \rightarrow H_m \leftarrow D \leftarrow S$. If left unclosed, confound inference along $S\rightarrow H_p$, so just need to condition on $S$ (we're doing that anyway). Still need to keep in mind the danger if we get functions or distributions wrong.
+
+
+
+
+## R code 15.10
+D <- ifelse( S > 0 , 1 , 0 )
+Hm <- H
+Hm[D==1] <- NA
+
+## R code 15.11
+set.seed(501)
+N <- 1000
+X <- rnorm(N)
+S <- rnorm(N)
+H <- rbinom( N , size=10 , inv_logit( 2 + S - 2*X ) )
+D <- ifelse( X > 1 , 1 , 0 )
+Hm <- H
+Hm[D==1] <- NA
+
+
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+  S -> H_p -> H_r <-D
+  H_p [unobserved]
+  }")
+coordinates(dag) <- list( x=c(S=0, D=0, H_p=1, H_r=1) , y=c(S=0, D=1, H_p=0, H_r=1) )
+drawdag(dag)
+```
