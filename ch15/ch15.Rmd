@@ -306,15 +306,25 @@ drawdag(dag)
 
 This scenario is far more problematic, students that study more than average have their homeworks eaten more. Backdoor non-causal path from $H_p \rightarrow H_m \leftarrow D \leftarrow S$. If left unclosed, confound inference along $S\rightarrow H_p$, so just need to condition on $S$ (we're doing that anyway). Still need to keep in mind the danger if we get functions or distributions wrong.
 
+Next scenario:
 
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+  S -> H_p -> H_m <-D
+  S-> D
+  D<-X->H_p
+  H_p [unobserved]
+  X [unobserved]
+  }")
+coordinates(dag) <- list( x=c(S=0, D=0, H_p=1, H_m=1,X=0.5) , y=c(S=0, D=1, H_p=0, H_m=1,X=0.5) )
+drawdag(dag)
+```
 
+New variable $X$ represents how noisy a house is - worse homework $X \rightarrow H_p$, and also more misbehaving dog $X\rightarrow D$. New causal path $H_m \leftarrow D \leftarrow X \rightarrow H_p$.
 
-## R code 15.10
-D <- ifelse( S > 0 , 1 , 0 )
-Hm <- H
-Hm[D==1] <- NA
+Simulating this and building a binomial model
 
-## R code 15.11
+```{r, results=FALSE, message=FALSE, warning=FALSE}
 set.seed(501)
 N <- 1000
 X <- rnorm(N)
@@ -324,13 +334,52 @@ D <- ifelse( X > 1 , 1 , 0 )
 Hm <- H
 Hm[D==1] <- NA
 
+dat_list <- list(
+    H = H,
+    S = S )
 
+m15.3 <- ulam(
+    alist(
+        H ~ binomial( 10 , p ),
+        logit(p) <- a + bS*S,
+        a ~ normal( 0 , 1 ),
+        bS ~ normal( 0 , 0.5 )
+    ), data=dat_list , chains=2 ,cmdstan = TRUE)
+precis( m15.3 )
+```
+
+$S$ coefficient should be 1.00, but isn't - _omitted variable bias_.
+
+Also look at the impact of missing data - same model, but use $H_p$ instead of $H_m$ for cases where $D=1$.
+
+```{r,  results=FALSE, message=FALSE, warning=FALSE}
+dat_list0 <- list( H = H[D==0] , S = S[D==0] )
+
+m15.4 <- ulam(
+    alist(
+        H ~ binomial( 10 , p ),
+        logit(p) <- a + bS*S,
+        a ~ normal( 0 , 1 ),
+        bS ~ normal( 0 , 0.5 )
+    ), data=dat_list0 , chains=2, cmdstan = TRUE)
+precis( m15.4 )
+```
+
+Coefficient is less biased, but still biased. In fact, deleting noisy houses from the data makes the estimate better.
+
+Last case:
 
 ```{r, fig.align="center", fig.height=2}
 dag <- dagitty("dag{ 
-  S -> H_p -> H_r <-D
+  S -> H_p -> H_m <-D
+  S-> D
+  H_p -> D
   H_p [unobserved]
   }")
-coordinates(dag) <- list( x=c(S=0, D=0, H_p=1, H_r=1) , y=c(S=0, D=1, H_p=0, H_r=1) )
+coordinates(dag) <- list( x=c(S=0, D=0, H_p=1, H_m=1) , y=c(S=0, D=1, H_p=0, H_m=1) )
 drawdag(dag)
 ```
+
+Path from $H_p \rightarrow D$, dogs prefer to eat bad homework. This is the worst kind of missing value - variable causes its own missing values. Nothing we can do to condition on the non-causal path $S \rightarrow H_p \rightarrow D \rightarrow H_m$. Unless you know the mechanism that produces missing data, there's little hope - measurement is all we have.
+
+### Imputing Primates
