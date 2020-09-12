@@ -1,6 +1,7 @@
 # Chapter 15 - Missing Data and Other Opportunities
 ```{r, include=FALSE}
 library(rethinking)
+library(dagitty)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
@@ -50,7 +51,6 @@ Think of how we'd generate data, what would we want errors to look like? Decreas
 A DAG:
 
 ```{r}
-library(dagitty)
 dag <- dagitty("dag{ 
   A-> M -> D
   A-> D -> D_obs <- e_D
@@ -126,7 +126,6 @@ If you plot the previous vs new model, one thing to notice is that the less cert
 If there's error on predictors, the approach is the same.
 
 ```{r}
-library(dagitty)
 dag <- dagitty("dag{ 
   A-> M -> D
   A-> D -> D_obs <- e_D
@@ -345,7 +344,10 @@ m15.3 <- ulam(
         a ~ normal( 0 , 1 ),
         bS ~ normal( 0 , 0.5 )
     ), data=dat_list , chains=2 ,cmdstan = TRUE)
-precis( m15.3 )
+```
+
+```{r}
+precis(m15.3)
 ```
 
 $S$ coefficient should be 1.00, but isn't - _omitted variable bias_.
@@ -365,6 +367,11 @@ m15.4 <- ulam(
 precis( m15.4 )
 ```
 
+```{r}
+precis(m15.4)
+```
+
+
 Coefficient is less biased, but still biased. In fact, deleting noisy houses from the data makes the estimate better.
 
 Last case:
@@ -383,3 +390,187 @@ drawdag(dag)
 Path from $H_p \rightarrow D$, dogs prefer to eat bad homework. This is the worst kind of missing value - variable causes its own missing values. Nothing we can do to condition on the non-causal path $S \rightarrow H_p \rightarrow D \rightarrow H_m$. Unless you know the mechanism that produces missing data, there's little hope - measurement is all we have.
 
 ### Imputing Primates
+
+Can _impute_ missing values to avoid biased estimation and use all observed data.
+
+Go back to milk/neocortex size example, 12 missing values on ```neocortex.perc``` column. Before, we dropped those (_complete-case_), but that's 12/29 data points.
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+               K<-M<-U->B->K
+               U [unobserved]
+               }")
+coordinates(dag) <- list( x=c(M=0, U=1, K=1, B=2) , y=c(M=0, U=0, K=1, B=0) )
+drawdag(dag)
+```
+
+$U$ makes $M$ and $B$ correlated. The observed values $B_m$ are partially observed, so adding missingness to this DAG, can occur a few ways. Say the process which causes missingness generates $R_B$ which indicates which species have missing values.
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+               K<-M<-U->B->K
+               B-> B_m <- R_B
+               U [unobserved]
+               B [unobserved]
+               }")
+coordinates(dag) <- list( x=c(M=0, U=1, K=1, B=2, B_m=2, R_B=1) , y=c(M=0, U=0, K=1, B=0,B_m=-1, R_B=-1) )
+drawdag(dag)
+```
+
+Case here, $R_B$ is completely random - no new non-causal paths. This doesn't cause any problems with our earlier approach, since dropping the values doesn't bias the inference.
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+               K<-M<-U->B->K
+               B-> B_m <- R_B <- M
+               U [unobserved]
+               B [unobserved]
+               }")
+coordinates(dag) <- list( x=c(M=0, U=1, K=1, B=2, B_m=2, R_B=1) , y=c(M=0, U=0, K=1, B=0,B_m=-1, R_B=-1) )
+drawdag(dag)
+```
+
+If the missing data is influenced by body mass then we have a new non-causal path, $B_m \leftarrow R_B \leftarrow M \rightarrow K$. But since we're conditioning on $M$, this blocks the path. This might happen if smaller primates are studied more than larger ones. Still want to impute values so we don't throw away information.
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+               K<-M<-U->B->K
+               R_B <- B-> B_m <- R_B
+               U [unobserved]
+               B [unobserved]
+               }")
+coordinates(dag) <- list( x=c(M=0, U=1, K=1, B=2, B_m=2, R_B=1) , y=c(M=0, U=0, K=1, B=0,B_m=-1, R_B=-1) )
+drawdag(dag)
+```
+
+This case, brain size influences $R_B$, perhaps if scientists are more interested in large brained species. This scenario is the worst, $B \rightarrow K$ is biased by a non-causal path through $R_B$ and not able to test if $B$ influences $R_B$.
+
+These arise in many ways, consider:
+
+```{r, fig.align="center", fig.height=2}
+dag <- dagitty("dag{ 
+               K<-M<-U->B->K
+               V->B->B_m<-R_B<-V
+               U [unobserved]
+               B [unobserved]
+               V [unobserved]
+               }")
+coordinates(dag) <- list( x=c(M=0, U=1, K=1, B=2, B_m=3, R_B=3, V=2.5) , y=c(M=0, U=0, K=1, B=0,B_m=0, R_B=1, V=0.5) )
+drawdag(dag)
+```
+
+Some unobserved $V$ influences both $B$ and $R_B$, could be something like similarity to humans, which motivates more study.
+
+
+So what to do? In all cases, we'd like to impute missing values of $B$. case 1 and 2, do so in order to not throw away corresponding $M$ values. In the third, we have to impute for a sensible $B\rightarrow K$ estimate.
+
+How to impute? Model the variable that has missing values, give missing values unique parameters, then let that distribution become a prior for missing values. Ultimately we get a posterior for missing values. Say for $B$,
+
+$$ 
+  B= [0.55, B_2, B_3,B_4,0.65,0.65,\dots,0.76,0.75]
+$$
+
+We give parameter $B_i$ for missing values.
+
+\begin{align*}
+  K_i &\sim \text{Normal}(\mu_i,\sigma)
+  \mu_i &= \alpha + \beta_B B_i + \beta_M \log M_i \\
+  B_i &\sim \text{Normal}(\nu, \sigma_B)\\
+  \alpha &\sim \text{Normal}(0,0.5)\\
+  \beta_B &\sim \text{Normal}(0,0.5)\\
+  \beta_M &\sim \text{Normal}(0,0.5)\\
+  \sigma &\sim \text{Exponential}(1)\\
+  \nu &\sim \text{Normal}(0.5,1)\\
+  \sigma_B &\sim \text{Exponential}(1)\\
+\end{align*}
+
+We have $B_i$ as the distribution for missing $B$, when its a value, this is a likelihood - $\nu$ and $\sigma_B$ are learned from data. When it's missing, the line is interpreted as a prior. This is a little awkward because we know values are bounded on [0,1].
+
+Imputing can be awkward, because locations lead to index management. Rethinking ```ulam``` automates.
+
+```{r,results=FALSE, message=FALSE, warning=FALSE}
+library(rethinking)
+data(milk)
+d <- milk
+d$neocortex.prop <- d$neocortex.perc / 100
+d$logmass <- log(d$mass)
+dat_list <- list(
+    K = standardize( d$kcal.per.g ),
+    B = standardize( d$neocortex.prop ),
+    M = standardize( d$logmass ) )
+
+m15.5 <- ulam(
+    alist(
+        K ~ dnorm( mu , sigma ),
+        mu <- a + bB*B + bM*M,
+        B ~ dnorm( nu , sigma_B ),
+        c(a,nu) ~ dnorm( 0 , 0.5 ),
+        c(bB,bM) ~ dnorm( 0, 0.5 ),
+        sigma_B ~ dexp( 1 ),
+        sigma ~ dexp( 1 )
+    ) , data=dat_list , chains=2 , cores=2,cmdstan = TRUE)
+```
+
+```{r}
+precis( m15.5 , depth=2 )
+```
+
+
+Notice precis gives a unique distribution for missing values.
+
+Also will build a corresponding non-imputed model and compare.
+
+```{r,results=FALSE, message=FALSE, warning=FALSE}
+obs_idx <- which( !is.na(d$neocortex.prop) )
+dat_list_obs <- list(
+    K = dat_list$K[obs_idx],
+    B = dat_list$B[obs_idx],
+    M = dat_list$M[obs_idx] )
+m15.6 <- ulam(
+    alist(
+        K ~ dnorm( mu , sigma ),
+        mu <- a + bB*B + bM*M,
+        B ~ dnorm( nu , sigma_B ),
+        c(a,nu) ~ dnorm( 0 , 0.5 ),
+        c(bB,bM) ~ dnorm( 0, 0.5 ),
+        sigma_B ~ dexp( 1 ),
+        sigma ~ dexp( 1 )
+    ) , data=dat_list_obs , chains=2 , cores=2 ,cmdstan = TRUE)
+```
+
+```{r}
+precis( m15.6 )
+```
+
+Looking at posteriors:
+```{r}
+plot( coeftab(m15.5,m15.6) , pars=c("bB","bM") )
+```
+
+Top is bB, bottom is bM. Notice imputed model has narrower distributions for these, since it uses more information.
+
+```{r}
+post <- extract.samples( m15.5 )
+B_impute_mu <- apply( post$B_impute , 2 , mean )
+B_impute_ci <- apply( post$B_impute , 2 , PI )
+
+# B vs K
+plot( dat_list$B , dat_list$K , pch=16 , col=rangi2 ,
+    xlab="neocortex percent (std)" , ylab="kcal milk (std)" )
+miss_idx <- which( is.na(dat_list$B) )
+Ki <- dat_list$K[miss_idx]
+points( B_impute_mu , Ki )
+for ( i in 1:12 ) lines( B_impute_ci[,i] , rep(Ki[i],2) )
+
+# M vs B
+plot( dat_list$M , dat_list$B , pch=16 , col=rangi2 ,
+    ylab="neocortex percent (std)" , xlab="log body mass (std)" )
+Mi <- dat_list$M[miss_idx]
+points( Mi , B_impute_mu )
+for ( i in 1:12 ) lines( rep(Mi[i],2) , B_impute_ci[,i] )
+
+```
+
+Imputed values are shown in blue with 89% compaitbility intervals in the line segments - of course there's a lot of uncertainty.
+  
+
