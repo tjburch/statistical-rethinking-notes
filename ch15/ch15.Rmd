@@ -571,6 +571,165 @@ for ( i in 1:12 ) lines( rep(Mi[i],2) , B_impute_ci[,i] )
 
 ```
 
-Imputed values are shown in blue with 89% compaitbility intervals in the line segments - of course there's a lot of uncertainty.
+Imputed values are shown in blue with 89% compaitbility intervals in the line segments - of course there's a lot of uncertainty. The second plot shows the relationship between the predictors, no upward slope since the regression assumed no relationship.
+
+Can improve the model by changing imputation to estimate the predictor relationship, change the normal distribution to
+
+$$
+  (M_i, B_i) \sim \text{MVNormal}((\mu_M, \mu_B),\mathbf{S})
+$$
+with covariance matrix **S**, measuring correlation between $M$ and $B$. Making that model with ulam:
+
+```{r,results=FALSE, message=FALSE, warning=FALSE}
+m15.7 <- ulam(
+    alist(
+       # K as function of B and M
+        K ~ dnorm( mu , sigma ),
+        mu <- a + bB*B_merge + bM*M,
+
+       # M and B correlation
+        MB ~ multi_normal( c(muM,muB) , Rho_BM , Sigma_BM ),
+        matrix[29,2]:MB <<- append_col( M , B_merge ),
+
+       # define B_merge as mix of observed and imputed values
+        vector[29]:B_merge <- merge_missing( B , B_impute ),
+
+       # priors
+        c(a,muB,muM) ~ dnorm( 0 , 0.5 ),
+        c(bB,bM) ~ dnorm( 0, 0.5 ),
+        sigma ~ dexp( 1 ),
+        Rho_BM ~ lkj_corr(2),
+        Sigma_BM ~ dexp(1)
+    ) , data=dat_list , chains=2 , cores=2 , cmdstan = TRUE)
+```
+
+
+```{r}
+precis( m15.7 , depth=3 , pars=c("bM","bB","Rho_BM" ) )
+```
   
+Slopes haven't changed much, but the important thing is the posterior correlation - 0.6, which is strong. Remaking the above plots,
+
+```{r}
+post <- extract.samples( m15.7 )
+B_impute_mu <- apply( post$B_impute , 2 , mean )
+B_impute_ci <- apply( post$B_impute , 2 , PI )
+
+# B vs K
+plot( dat_list$B , dat_list$K , pch=16 , col=rangi2 ,
+    xlab="neocortex percent (std)" , ylab="kcal milk (std)" )
+miss_idx <- which( is.na(dat_list$B) )
+Ki <- dat_list$K[miss_idx]
+points( B_impute_mu , Ki )
+for ( i in 1:12 ) lines( B_impute_ci[,i] , rep(Ki[i],2) )
+
+# M vs B
+plot( dat_list$M , dat_list$B , pch=16 , col=rangi2 ,
+    ylab="neocortex percent (std)" , xlab="log body mass (std)" )
+Mi <- dat_list$M[miss_idx]
+points( Mi , B_impute_mu )
+for ( i in 1:12 ) lines( rep(Mi[i],2) , B_impute_ci[,i] )
+```
+
+
+Specifically looking at the second plot, the positive correlation is retained in the imputing.
+
+### Overthinking
+
+The stan code for 15.3 has a functions block:
+
+```{r}
+stancode(m15.5)
+```
+
+The goal of that is to not clutter the model block. The key of the model block:
+
+```
+    B_merge = merge_missing(B_missidx, to_vector(B), B_impute);
+    B_merge ~ normal( nu , sigma_B );
+    for ( i in 1:29 ) {
+        mu[i] = a + bB * B_merge[i] + bM * M[i];
+    }
+    K ~ normal( mu , sigma );
+```
+
+The first line merges observed and imputed data, using the function. If you use ulam, `B_missidx` is made for you, but using real stan, you need:
+
+```
+ B_missidx <- which( is.na( dat_list$B ) )
+```
+
+
+### 15.2.3 Where is your god now?
+
+Sometimes there's no statistical solutions to scientific problems, but statistical thinking can inform us there isn't a solution.
+
+Religion example, evaluating moralizing gods vs self-interested.
+
+```{r}
+data(Moralizing_gods)
+str(Moralizing_gods)
+```
+
+Given population sizes (log scale) of regions (polity) in various century. Moralizing gods column indicates if members believed in supernatural enforcement of morality (1), or not (0), or insufficient evidence (NA).
+
+Causal analysis - do moralizing gods increase rate of population growth? Many unobserved confounds could produce a non-causal association, belief may not produce a detectable increase in population. Minimally, need a comparison of population growth before and after each society adopts moralizing gods. No sense in which we can think of the year moralizing gods appear as random treatment, but if we playfully assume no confounds, how to go about?
+
+```{r}
+table( Moralizing_gods$moralizing_gods , useNA="always" )
+```
+
+A lot of NAs, 60%, and only 17 cases of 0.
+
+If missing data are scattered at random, this is less problematic.
+
+```{r}
+symbol <- ifelse( Moralizing_gods$moralizing_gods==1 , 16 , 1 )
+symbol <- ifelse( is.na(Moralizing_gods$moralizing_gods) , 4 , symbol )
+color <- ifelse( is.na(Moralizing_gods$moralizing_gods) , "black" , rangi2 )
+plot( Moralizing_gods$year , Moralizing_gods$population , pch=symbol ,
+    col=color , xlab="Time (year)" , ylab="Population size" , lwd=1.5 )
+```
+
+This is non-random, so that stinks.
+
+```{r}
+with( Moralizing_gods ,
+    table( gods=moralizing_gods , literacy=writing , useNA="always" ) )
+```
+
+Note most missing are non-literate cultures, which means no evidence really. Smaller cultures also less likely to be literate. Data is structured by strong association of literacy, moralizing gods, and missing values, and can't really be saved. One option: complete case analysis, but this biases our inference, because missing values are correlated with other variables associated with outcome.
+
+```{r}
+dag <- dagitty("dag{
+               G -> P -> W -> R_G -> G_m <- G
+               G[unobserved]
+               }")
+drawdag(dag)
+```
+
+A guess shown, $P$ population growth, $G_m$ measured presence of belief in moralizing gods, $G$ actual presence of belief, $W$ writing, and $R_G$ missing values.
+
+This is optimistic, assuming no confounds among $P, G$ and $W$, but even with this we can't recover from missing data.
+
+One last hope - condition on $G$ rather than $G_m$ - imputation would "reconstruct" $G$. This is non-trivial, consider in 1778 when europeans influenced hawaii
+
+```{r}
+haw <- which( Moralizing_gods$polity=="Big Island Hawaii" )
+columns <- c("year","writing","moralizing_gods")
+t( Moralizing_gods[ haw , columns ] )
+```
+
+Hawaii never generated its own writing, so no direct evidence of when moralizing gods appeared. Imputing would need to figure that out, but so much missing data causes large assumptions.
+
+Strongest assumption - NA=0, moralizing god cultures would never create a missing value. Heavy bias, but also not rare in practice.
+
+Other options, model-based imputation, but no obvious correct way. Another obstacle - imputing discrete variables is more tricky than continuous.
+
+## 15.3 - Categorical Errors and Discrete Absences
+
+
+ 
+
+
 
