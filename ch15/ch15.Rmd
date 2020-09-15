@@ -50,7 +50,7 @@ Think of how we'd generate data, what would we want errors to look like? Decreas
 
 A DAG:
 
-```{r}
+```{r,  fig.align="center",fig.height=3}
 dag <- dagitty("dag{ 
   A-> M -> D
   A-> D -> D_obs <- e_D
@@ -125,7 +125,7 @@ If you plot the previous vs new model, one thing to notice is that the less cert
 
 If there's error on predictors, the approach is the same.
 
-```{r}
+```{r,  fig.align="center",fig.height=3}
 dag <- dagitty("dag{ 
   A-> M -> D
   A-> D -> D_obs <- e_D
@@ -202,7 +202,7 @@ The big takeaway - if you have a big distribution of values, don't use a single 
 
 Errors can be difficult to manage, especialy if correlated. Imagine for some variable $P$,
 
-```{r}
+```{r, fig.height=3}
 dag <- dagitty("dag{ 
   A-> M -> D
   A-> D -> D_obs <- e_D
@@ -221,7 +221,7 @@ drawdag(dag)
 If we regress $D_{obs}$ on $M_{obs}$, there's an open, non-causal path. A possible solution is to model true $D$ and $M$, if we know the measurement process.
 
 There's also the case where one variable influences the error and creates a non-causal path:
-```{r}
+```{r, fig.align="center", fig.height=3}
 dag <- dagitty("dag{ 
   A-> M -> D
   A-> D -> D_obs <- e_D
@@ -239,7 +239,7 @@ This might happen if marriages are rare, then fewer divorce possibilities, then 
 
 Anther problem is when a causal variable is measured less precisely than a non-causal. Say we know $D$ and $M$ well but $A$ has a lot of error, and no causality between $M$ and $D$:
 
-```{r}
+```{r,  fig.align="center",fig.height=3}
 dag <- dagitty("dag{ 
   e_A [unobserved]
   A [unobserved]
@@ -728,8 +728,136 @@ Other options, model-based imputation, but no obvious correct way. Another obsta
 
 ## 15.3 - Categorical Errors and Discrete Absences
 
+Discrete variables are more challenging - no flat surface for HMC, calibration is hard. Instead of sampling, do a _weighted average_ to remove discrete parameters - after sampling other parameters, use their damples to compute posterior of any discrete parameter removed.
 
- 
+### Discrete Cats 
+
+Neighborhood example - every house has a songbird, record 1 minute from each house. Some houses have cats, wonder if that changes amount each sings, try to figure out which houses have cats, which you can do for 80% but not the other 20%.
+
+DAG:
+
+```{r, fig.height=2}
+dag <- dagitty("dag{
+               R_C -> C_m <-C->N
+               C [unobserved]
+               }")
+coordinates(dag) <- list( x=c(R_C=0, C_m=1, C=2, N=3), y=c(R_C=0, C_m=0, C=0, N=0))
+drawdag(dag) 
+```
+
+Presence/absence of cat $C$ affects notes sung $N$. Missing values $R_C$ cause us only to observe $C_m$.
+
+\begin{align*}
+  N_i &\sim \text{Poisson}(\lambda_i)\\
+  \log \lambda_i &= \alpha +\beta C_i\\
+  C_i &\sim \text{Bernoulli}(k)\\
+  R_{C,i} &\sim \text{Bernoulli}(r)\\
+\end{align*}
+
+Simulating this data, and picking values for the variables:
+
+```{r}
+set.seed(9)
+N_houses <- 100L
+alpha <- 5
+beta <- (-3)
+k <- 0.5
+r <- 0.2
+cat <- rbern( N_houses , k )
+notes <- rpois( N_houses , alpha + beta*cat )
+R_C <- rbern( N_houses , r )
+cat_obs <- cat
+cat_obs[R_C==1] <- (-9L)
+dat <- list(
+    notes = notes,
+    cat = cat_obs,
+    RC = R_C,
+    N = as.integer(N_houses) )
+```
+
+The last line before the datalist is setting unknown values to -9, nothing special, model will skip.
+
+Average our uncertainty in weather the cat was there or not - the likelihood of observing $N_i$ notes unconditional on cat $C_i$ is the probability of a cat times the probability of $N_i$ when there's a cat, plus the probability of no cat and the probability of $N_i when there isn't a cat.
+
+$$
+\Pr(N_i) = \Pr(C_i=1)\Pr(N_i|C_i =1) + \Pr(C_i =0)\Pr(N_i|C_i=0)
+$$
 
 
+When $C_i$ isn't known, compute likelihood of $N_i$ for each value and anverage. Can do in stan or ulam:
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+m15.8 <- ulam(
+    alist(
+        # singing bird model
+        ## cat known present/absent:
+        notes|RC==0 ~ poisson( lambda ),
+        log(lambda) <- a + b*cat,
+        ## cat NA:
+        notes|RC==1 ~ custom( log_sum_exp(
+                log(k) + poisson_lpmf( notes | exp(a + b) ),
+                log(1-k) + poisson_lpmf( notes | exp(a) )
+            ) ),
+
+        # priors
+        a ~ normal(0,1),
+        b ~ normal(0,0.5),
+
+        # sneaking cat model
+        cat|RC==0 ~ bernoulli(k),
+        k ~ beta(2,2)
+    ), data=dat , chains=2 , cores=2, cmdstan = TRUE )
+```
+
+The cat NA's are indicated in the code comment, making the weighted sum. The bottom term, ```cat|RC==0 ~bernoulli(k)``` represents cat presence or absence.
+
+So next we want the probability of a cat given notes sung, $\Pr (C_i=1|N_i)$. This can be done with Bayes' rule:
+
+$$
+  \Pr (C_i=1|N_i) = \frac{
+  \Pr(N_i|C_i=1)\Pr(C_i=1)
+  }{
+  \Pr(N_i|C_i=1)\Pr(C_i=1) + \Pr(N_i|C_i=0)\Pr(C_i=0)
+  }
+$$
+
+This looks a bit of a mess, but it's pretty straightforward weighted averaging on the denominator, the top is the probability of the given notes when there is a cat.
+
+This just needs a few extra lines in the code, using Stan's _Generated Quantities_ block. Ulam has gq> to accomplish this:
+
+```{r}
+m15.9 <- ulam(
+    alist(
+        # singing bird model
+        notes|RC==0 ~ poisson( lambda ),
+        notes|RC==1 ~ custom( log_sum_exp(
+                log(k) + poisson_lpmf( notes | exp(a + b) ),
+                log(1-k) + poisson_lpmf( notes | exp(a) )
+            ) ),
+        log(lambda) <- a + b*cat,
+        a ~ normal(0,1),
+        b ~ normal(0,0.5),
+
+        # sneaking cat model
+        cat|RC==0 ~ bernoulli(k),
+        k ~ beta(2,2),
+
+        # imputed values
+        gq> vector[N]:PrC1 <- exp(lpC1)/(exp(lpC1)+exp(lpC0)),
+        gq> vector[N]:lpC1 <- log(k) + poisson_lpmf( notes[i] | exp(a+b) ),
+        gq> vector[N]:lpC0 <- log(1-k) + poisson_lpmf( notes[i] | exp(a) )
+    ), data=dat , chains=2 , cores=2, cmdstan = TRUE )
+```
+
+The new lines are the imputed values. The first defines a vector to hold probabilities (exponential stuff is beause we want to work on log scale). Next two lines are likelihoods as before - cat present `lpC1` and cat absent `lpC0`.
+
+This can blow up code for many different options (e.g. consider adding dogs and cats independently), we'll investigate this in the next chapter with _state space models_, specifically _Hidden Markov Models_, and use a _forward algorithm_.
+
+### Discrete Error
+
+This example concerned missing data, but when measured with error, apporach is similar - make probability of a cat $k_i$, and replace the parameter $k$ with it.
+
+# 15.4 - Summary
+
+Chapter outlined design and implementation of measurement error and missing data. The causes of these can be random, or biased, so this helps us decide how to incorporate into a model. This requires careful thought and attention.
 
