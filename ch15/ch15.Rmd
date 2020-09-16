@@ -64,7 +64,7 @@ drawdag(dag)
 
 True divorce rate cannot be observed, but we do have a observed divorce rate that's a function of the true divorce rate and the error on it. Most regressions in general are really looking at $D_{obs}$ as a proxy for $D$.
 
-How to put into a model - like a simulation but in reverse, assign a distribution to observations and draw from it. For examplue, if a measurement is 10 meters with standard Guassian deviation of 2, implies 
+How to put into a model - like a simulation but in reverse, assign a distribution to observations and draw from it. For example, if a measurement is 10 meters with standard Gaussian deviation of 2, implies 
 
 $$
   y \sim \text{Normal}(10,2)
@@ -200,7 +200,7 @@ The big takeaway - if you have a big distribution of values, don't use a single 
 
 ### Measurement Terrors
 
-Errors can be difficult to manage, especialy if correlated. Imagine for some variable $P$,
+Errors can be difficult to manage, especially if correlated. Imagine for some variable $P$,
 
 ```{r, fig.height=3}
 dag <- dagitty("dag{ 
@@ -303,7 +303,7 @@ coordinates(dag) <- list( x=c(S=0, D=0, H_p=1, H_m=1) , y=c(S=0, D=1, H_p=0, H_m
 drawdag(dag)
 ```
 
-This scenario is far more problematic, students that study more than average have their homeworks eaten more. Backdoor non-causal path from $H_p \rightarrow H_m \leftarrow D \leftarrow S$. If left unclosed, confound inference along $S\rightarrow H_p$, so just need to condition on $S$ (we're doing that anyway). Still need to keep in mind the danger if we get functions or distributions wrong.
+This scenario is far more problematic, students that study more than average have their homework eaten more. Backdoor non-causal path from $H_p \rightarrow H_m \leftarrow D \leftarrow S$. If left unclosed, confound inference along $S\rightarrow H_p$, so just need to condition on $S$ (we're doing that anyway). Still need to keep in mind the danger if we get functions or distributions wrong.
 
 Next scenario:
 
@@ -571,7 +571,7 @@ for ( i in 1:12 ) lines( rep(Mi[i],2) , B_impute_ci[,i] )
 
 ```
 
-Imputed values are shown in blue with 89% compaitbility intervals in the line segments - of course there's a lot of uncertainty. The second plot shows the relationship between the predictors, no upward slope since the regression assumed no relationship.
+Imputed values are shown in blue with 89% compatibility intervals in the line segments - of course there's a lot of uncertainty. The second plot shows the relationship between the predictors, no upward slope since the regression assumed no relationship.
 
 Can improve the model by changing imputation to estimate the predictor relationship, change the normal distribution to
 
@@ -712,7 +712,7 @@ A guess shown, $P$ population growth, $G_m$ measured presence of belief in moral
 
 This is optimistic, assuming no confounds among $P, G$ and $W$, but even with this we can't recover from missing data.
 
-One last hope - condition on $G$ rather than $G_m$ - imputation would "reconstruct" $G$. This is non-trivial, consider in 1778 when europeans influenced hawaii
+One last hope - condition on $G$ rather than $G_m$ - imputation would "reconstruct" $G$. This is non-trivial, consider in 1778 when Europeans influenced Hawaii
 
 ```{r}
 haw <- which( Moralizing_gods$polity=="Big Island Hawaii" )
@@ -728,7 +728,7 @@ Other options, model-based imputation, but no obvious correct way. Another obsta
 
 ## 15.3 - Categorical Errors and Discrete Absences
 
-Discrete variables are more challenging - no flat surface for HMC, calibration is hard. Instead of sampling, do a _weighted average_ to remove discrete parameters - after sampling other parameters, use their damples to compute posterior of any discrete parameter removed.
+Discrete variables are more challenging - no flat surface for HMC, calibration is hard. Instead of sampling, do a _weighted average_ to remove discrete parameters - after sampling other parameters, use their samples to compute posterior of any discrete parameter removed.
 
 ### Discrete Cats 
 
@@ -784,7 +784,7 @@ $$
 $$
 
 
-When $C_i$ isn't known, compute likelihood of $N_i$ for each value and anverage. Can do in stan or ulam:
+When $C_i$ isn't known, compute likelihood of $N_i$ for each value and average. Can do in stan or ulam:
 
 ```{r, results=FALSE, message=FALSE, warning=FALSE}
 m15.8 <- ulam(
@@ -825,7 +825,7 @@ This looks a bit of a mess, but it's pretty straightforward weighted averaging o
 
 This just needs a few extra lines in the code, using Stan's _Generated Quantities_ block. Ulam has gq> to accomplish this:
 
-```{r}
+```{r, results=FALSE, message=FALSE, warning=FALSE}
 m15.9 <- ulam(
     alist(
         # singing bird model
@@ -849,13 +849,13 @@ m15.9 <- ulam(
     ), data=dat , chains=2 , cores=2, cmdstan = TRUE )
 ```
 
-The new lines are the imputed values. The first defines a vector to hold probabilities (exponential stuff is beause we want to work on log scale). Next two lines are likelihoods as before - cat present `lpC1` and cat absent `lpC0`.
+The new lines are the imputed values. The first defines a vector to hold probabilities (exponential stuff is beaus we want to work on log scale). Next two lines are likelihoods as before - cat present `lpC1` and cat absent `lpC0`.
 
 This can blow up code for many different options (e.g. consider adding dogs and cats independently), we'll investigate this in the next chapter with _state space models_, specifically _Hidden Markov Models_, and use a _forward algorithm_.
 
 ### Discrete Error
 
-This example concerned missing data, but when measured with error, apporach is similar - make probability of a cat $k_i$, and replace the parameter $k$ with it.
+This example concerned missing data, but when measured with error, approach is similar - make probability of a cat $k_i$, and replace the parameter $k$ with it.
 
 # 15.4 - Summary
 
