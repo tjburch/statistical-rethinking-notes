@@ -46,7 +46,7 @@ $$
   \sigma &\sim \text{Exponential}(1)
 \end{align*}
 
-The first line is the distribution of the outcome, weight. It is positive and continuous, so chose Log-Normal, aparameterized by mean, $\mu$. The median is $\exp(\mu_i)$, so this is what we assign. 
+The first line is the distribution of the outcome, weight. It is positive and continuous, so chose Log-Normal, parameterized by mean, $\mu$. The median is $\exp(\mu_i)$, so this is what we assign. 
 
 One big thing to note is that $k$ and $p$ are multiplied and we have no way to estimate anything other than their product - they're _not identifiable_. So we replace $kp^2$ with a new parameter $\theta$,
 
@@ -60,7 +60,7 @@ For $p$, it's the ratio of radius to height, $p=r/h$, so greater than 0. Definit
 $$ p \sim \text{Beta}(2,18) $$
 This way it's got mean $2/(2+18) = 0.1$.
 
-Next $k$, proportion of volume to weight - really just translates measurement scales. If height is in cm and weight in kg, volume has units cm$^3$, so $k$ is $kg/cm^3$, or how many kilograms are in a cubic centemeter - something we could look up or measure on our own bodies.
+Next $k$, proportion of volume to weight - really just translates measurement scales. If height is in cm and weight in kg, volume has units cm$^3$, so $k$ is $kg/cm^3$, or how many kilograms are in a cubic centimeter - something we could look up or measure on our own bodies.
 
 If that's not a possibility though, can just get rid of measurement scales - divide height and weight by mean value:
 
@@ -79,7 +79,7 @@ $$
   1 = k \pi p^2 1^3
 $$
 
-If we want $p < 0.5$, then $k>1$, so we constrain $k$ to be postivie with a prior mean around 2,
+If we want $p < 0.5$, then $k>1$, so we constrain $k$ to be positive with a prior mean around 2,
 
 $$
   k \sim \text{Exponential}(0.5)
@@ -128,3 +128,185 @@ shade(w_CI, h_seq)
 ```
 
 The model gets the general scaling relationship right, though it's not great at low values - $p$ and $k$ might be different for children.
+
+The key-line takeaway: using the scientific approach, parameters have biological meanings, and these give us useful hints.
+
+### GLLM in Disguise
+
+Consider model related to logarithm of weight:
+
+$$
+  \log(w_i) = \mu_i = \log(k\pi p^2 h_i^3)
+$$
+
+Since multiplication becomes addition on log scale, rewrite:
+
+$$
+  \log(w_i) = \log(k) + \log(\pi) + 2\log(p) + 3\log(h_i)
+$$
+
+Linear regression on the log scale! Then $3\log(h_i)$ is a predictor with fixed coefficient of 3 from theory  that we didn't need to estimate. This just emphasizes the strength of GLMs, a lot of natural relationships _are_ GLMs.
+
+## 16.2 Hidden Minds and Observed Behavior
+
+The _inverse problem_ is common in scientific inference, figuring out causes from observations. This chapter will go from one with developmental psychology - how to determine if children are are influenced by the majority. 629 children saw 4 choose among 3 boxes. In each trial one was a majority choice (3), one a minority (1), and one unselected.
+
+```{r}
+library(rethinking)
+data(Boxes)
+precis(Boxes)
+```
+
+Outcome is y, taking value 1, 2, 3 - 1 is unchosen, 2 indicates majority, 3 is minority. Then `majority_first` shows if the majority color was demonstrated before the minority. Use outcome to infer strategies to choose a color.
+
+```{r}
+table(Boxes$y) / length(Boxes$y)
+```
+
+This does _not_ mean 45% are choosing the strategy of just following the majority - others exist. Pick at random, for example.
+
+### Scientific Model
+
+Think generatively - simulate cases where half pick at random, half follow majority
+```{r}
+set.seed(5)
+N <- 30 # number of children
+
+# half are random
+# sample from 1,2,3 at random for each
+y1 <- sample( 1:3 , size=N/2 , replace=TRUE )
+
+# half follow majority
+y2 <- rep( 2 , N/2 )
+
+# combine and shuffle y1 and y2
+y <- sample( c(y1,y2) )
+
+# count the 2s
+sum(y==2)/N
+```
+
+In this case about 2/3 pick the majority color, but half are actually doing that.
+
+Consider 5 possible behaviors:
+
+1. Follow Majority
+2. Follow Minority
+3. Maverick: pick the unselected color
+4. Random
+5. Follow first: pick the one that was demonstrated first
+
+Why these? They seem plausible 
+
+### Statistical Model
+
+Remember, they run in reverse of generative models. Can't directly measure strategy, but each has a probability of producing each choice. So compute probability of each choice given parameters specified by the probability of each strategy, then get posterior back. Before we can do this, need to enumerate parameters, assign priors, and figure out technical issues.
+
+Unobserved variables are probabilities for each of the strategies, we use a _simplex_. A vector of values that sum to a value (usually one), which we can give a Dirichlet prior. Use a weak uniform prior:
+
+$$
+  p \sim \text{Dirichlet}([4,4,4,4,4]).
+$$
+
+This means we don't expect any more or less probable than any other, if you make them larger the prior starts to say we expect them actually equal.
+
+Now the likelihood. For each choice, $y_i$, each strategy $s$ implies a probability of seeing $y_i$, call this $\Pr(y_i|s)$, the probability of the data, conditional on assuming a strategy $s$. To get the probability for each possible $S$, average over the simplex:
+
+$$
+  \Pr(y_i) = \sum_{s=1}^{5} p_s \Pr(y_i|s)
+$$
+
+This is the weighted average of probabilities of $y_i$ conditional on each strategy $s$. This _marginalizes_ out the unknown strategy. In statistical fashion,
+
+\begin{align*}
+  y_i &\sim \text{Categorical}(\theta)\\
+  \thea_j &= \sum_{s=1}^5 p_s \Pr(j|s) \text{   for  } j=1\dots 3 \\
+  p &\sim \text{Dirichlet}([4,4,4,4,4])
+\end{align*}
+
+Where $\theta$ holds the probability of each behavior conditional on $p$.
+
+### Coding the statistical model
+
+Writing directly into stan, I'll write the model as a string, save as a `.stan` file, then use cmdstan to pre-compile. 
+
+```{r}
+model_code = "
+data{
+  int N;
+  int y[N];
+  int majority_first[N];
+}
+parameters{
+  simplex[5] p;
+}
+model{
+  vector[5] phi;
+  
+  // prior
+  p ~ dirichlet( rep_vector(4,5) );
+  
+  // probability of data
+  for ( i in 1:N ) {
+      if ( y[i]==2 ) phi[1]=1; else phi[1]=0; // majority
+      if ( y[i]==3 ) phi[2]=1; else phi[2]=0; // minority
+      if ( y[i]==1 ) phi[3]=1; else phi[3]=0; // maverick
+      phi[4]=1.0/3.0;                         // random
+      if ( majority_first[i]==1 )             // follow first
+          if ( y[i]==2 ) phi[5]=1; else phi[5]=0;
+      else
+          if ( y[i]==3 ) phi[5]=1; else phi[5]=0;
+      
+      // compute log( p_s * Pr(y_i|s )
+      for ( j in 1:5 ) phi[j] = log(p[j]) + log(phi[j]);
+      // compute average log-probability of y_i
+      target += log_sum_exp( phi );
+  }
+}
+"
+m16_2_file <-"m16_2.stan"
+writeLines(model_code, m16_2_file)
+m16_2_cmdstan <- cmdstan_model(m16_2_file)
+```
+
+This needs 3 blocks of code. First the _data block_, which names observed variables and types. Next, the _parameters block_, like data, but for unobserved variables. Third, the _model bock_, which is the heart of our model. First, define phi to hold probability calculations, then define prior dirichlet. Then the tough part is the probability of data - loop over rows, for each row `i`, assign conditional on strategy. Also need to include the $p$ parameters, by adding each $\log(p_i)$, done in the last chunk above.
+
+ 
+Now prepping data and running sampler.
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+# prep data
+dat_list <- list(
+  N = nrow(Boxes),
+  y = Boxes$y,
+  majority_first = Boxes$majority_first
+)
+
+# Run stan using model defined above
+m16.2 <- m16_2_cmdstan$sample(data=dat_list, chains=2, cores=2)
+```
+
+```{r}
+# Get posterior draws
+m16_2_draws <- m16.2$draws()
+```
+
+```{r}
+library(bayesplot)
+library(posterior)
+library(ggplot2)
+posterior <- as_draws_df(m16_2_draws)
+plot_title <- ggtitle("Posterior distributions","of various strategies")
+mcmc_areas(posterior, 
+           pars=c("p[1]","p[2]","p[3]","p[4]","p[5]"), prob=.89) + plot_title
+```
+
+This has been sort of made in an ad-hoc way due to having to use cmdstan to pre-compile the model. 45% chose the majority color, but with this construction, between 20-30% were only doing it because of copying (p[1]).
+
+### State Space Models
+
+Boxes model shown represents a broader class called _state space models_ - multiple hidden states that produce observations, changing over time. When discrete categories, it may be called a _Hidden Markov Model_ (HMM). Applies to many time series models, since true state is not observed, just noisy measures.
+
+## 16.3 - Ordinary Differential Nut Cracking
+
+
