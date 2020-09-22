@@ -2,6 +2,9 @@
 ```{r, include=FALSE}
 library(rethinking)
 library(dagitty)
+library(bayesplot)
+library(posterior)
+library(ggplot2)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
@@ -220,7 +223,7 @@ This is the weighted average of probabilities of $y_i$ conditional on each strat
 
 \begin{align*}
   y_i &\sim \text{Categorical}(\theta)\\
-  \thea_j &= \sum_{s=1}^5 p_s \Pr(j|s) \text{   for  } j=1\dots 3 \\
+  \theta_j &= \sum_{s=1}^5 p_s \Pr(j|s) \text{   for  } j=1\dots 3 \\
   p &\sim \text{Dirichlet}([4,4,4,4,4])
 \end{align*}
 
@@ -292,9 +295,6 @@ m16_2_draws <- m16.2$draws()
 ```
 
 ```{r}
-library(bayesplot)
-library(posterior)
-library(ggplot2)
 posterior <- as_draws_df(m16_2_draws)
 plot_title <- ggtitle("Posterior distributions","of various strategies")
 mcmc_areas(posterior, 
@@ -309,4 +309,139 @@ Boxes model shown represents a broader class called _state space models_ - multi
 
 ## 16.3 - Ordinary Differential Nut Cracking
 
+Next example will look at Panda nuts, which are difficult for animals to open, but manageable with tools - model the development of nut opening skill among chimpanzees.
 
+```{r}
+data(Panda_nuts)
+d <- Panda_nuts
+head(d)
+```
+
+Each row is an bout of nut opening, interested in `nuts_opened`, the duration in `seconds` and `age`.
+
+### Scientific model
+
+Most basic model - only thing that matters is strength, which increases with age. In animals with terminal growth (reach stable adult body mass), size increases proportionally with distance remaining to maximum size,
+
+$$
+  \frac{dM}{dt} = k(M_{\text{max}}-M_t).
+$$
+
+Here, $k$ is a parameter measuring rate of skill gain with age. This differential equation is common in biology, with solution,
+
+$$
+  M_t = M_{\text{max}}(1-\exp(-kt)).
+$$
+
+What we care about though is strength, so we need to suppose strength is proportional to mass: $S_t = \beta M_t$, with $\beta$ as a constant of proportionality. 
+
+Last, need to relate strength to rate of nut cracking. It helps in 3 ways - heavier usable tools, faster arm acceleration, more efficient lever arms. This implies increasing returns,
+
+$$
+  \lambda = \alpha S_t^\theta = \alpha(\beta M_{\text{max}}(1-\exp(-kt)))^\theta,
+$$
+
+with $\theta$ being an exponent larger than 1. The new $\alpha$ parameter expresses proportionality of strength to nut opening - newtons of force to nuts per second.
+
+This is a giant soup of parameters, so let's simplify. First, rescale body mass scale, $M_{max}$, to equal 1. Next, $\alpha \beta^\theta$ is a giant scaling factor, so you can replace it with a single parameter $\phi$, yielding
+
+$$
+  \lambda = \phi (1-\exp(-kt))^\theta.
+$$
+
+
+### Statistical Model
+
+Likelihood is straightforward, it's just Poisson distributed.
+
+\begin{align*}
+  n_i &\sim \text{Poisson}(\lambda_i)\\
+  \lambda_i &= d_i \phi(1-\exp(-kt_i))^\theta
+\end{align*}
+
+Our outcome is $n_i$, number of nuts cracked, and the equation for $\lambda_i$ is the derived equation for rate of nuts cracked multiplied by duration/exposure $d_i$.
+
+Priors require us to consider biology. Chimpanzees reach adult mass around 12 years of age, $k$ and $\theta$ need to accomplish this. $\phi$ needs to have a mean around the maximum rate... who really knows, but hazarding a guess, one per second, since multiple can be opened at once? Let's try:
+
+\begin{align*}
+  \phi &\sim \text{Log-Normal}(\log(1),0.1)\\
+  k &\sim \text{Log-Normal}(\log(2),0.25)\\
+  \theta &\sim \text{Log-Normal}(\log(5),0.25)
+\end{align*}
+
+All are set to log normal because they're both positive and continuous. Let's do a simulation test:
+
+```{r}
+N <- 1e4
+phi <- rlnorm(N, log(1), 0.1)
+k <- rlnorm(N, log(2), 0.25)
+theta <- rlnorm(N, log(5), 0.25)
+
+# Growth curve
+plot(NULL, xlim=c(0,1.5), ylim=c(0,1), 
+     xaxt="n", xlab="Age", ylab="Body Mass")
+at <- c(0, 0.25, 0.5, 0.75, 1, 1.25, 1.5)
+axis(1, at=at, labels=round(at*max(Panda_nuts$age)))
+for (i in 1:20) curve ( (1-exp(-k[i]*x)), add=TRUE, col=grau(),lwd=1.5)
+```
+
+```{r}
+# Implied rate of nut opening curve
+plot(NULL, xlim=c(0,1.5), ylim=c(0,1.2), 
+     xaxt="n", xlab="Age", ylab="Nuts/Second")
+at <- c(0, 0.25, 0.5, 0.75, 1, 1.25, 1.5)
+axis(1, at=at, labels=round(at*max(Panda_nuts$age)))
+for (i in 1:20) curve ( phi[i]*(1-exp(-k[i]*x))^theta[i], add=TRUE, col=grau(),lwd=1.5)
+```
+
+
+Coding this model is possible with ulam,
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+dat_list <- list(
+  n = as.integer( Panda_nuts$nuts_opened),
+  age = Panda_nuts$age / max(Panda_nuts$age),
+  seconds = Panda_nuts$seconds
+)
+
+m16.4 <- ulam(
+  alist(
+    n ~ poisson(lambda),
+    lambda <- seconds * phi * (1-exp(-k*age))^theta,
+    phi ~ lognormal(log(1),0.1),
+    k ~ lognormal(log(2),0.25),
+    theta ~ lognormal(log(5),0.25)
+  ), data=dat_list, chains=2, cores=2, cmdstan = TRUE
+)
+```
+
+
+Interesting thing is the posterior developmental curve,
+
+```{r}
+post <- extract.samples(m16.4)
+plot(NULL, xlim=c(0,1.5), ylim=c(0,1.5), 
+     xaxt="n", xlab="Age", ylab="Nuts/Second")
+at <- c(0, 0.25, 0.5, 0.75, 1, 1.25, 1.5)
+axis(1, at=at, labels=round(at*max(Panda_nuts$age)))
+
+# Raw data
+pts <- dat_list$n / dat_list$seconds
+point_size <- normalize(dat_list$seconds)
+points( jitter(dat_list$age), pts, col=rangi2, lwd=2, cex=point_size*3)
+
+# Posterior curves
+for (i in 1:30) with (post,
+                      curve( phi[i]*(1-exp(-k[i]*x))^theta[i], add=TRUE, col=grau() ))
+```
+
+Blue points are raw data with size scaled by duration. 30 skill curves drawn from posterior distribution. They level off around the age of maximum body size, which is consistent with the idea that strength is the limiting factor.
+
+
+### Covariates and individual differences
+
+This model is pretty simple - you could extend it to covariates like sex. There are repeat observations of individuals, even across years, which could be used to estimate individual varying effects. You could also include a more realistic growth model of chimpanzees, which is well published.
+
+Some parameters make sense varying by individual, others don't. $\theta$ is a feature of only physics, not individual, probably don't vary it - this is another reason to avoid GLMs.
+
+## 16.4 - Population Dynamics
