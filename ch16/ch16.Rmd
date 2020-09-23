@@ -445,3 +445,37 @@ This model is pretty simple - you could extend it to covariates like sex. There 
 Some parameters make sense varying by individual, others don't. $\theta$ is a feature of only physics, not individual, probably don't vary it - this is another reason to avoid GLMs.
 
 ## 16.4 - Population Dynamics
+
+Populations of hares and lynx fluctuate over time - understanding number at a given time helps to understand in the future. We'll model a _time series_ of populations.
+
+```{r}
+data(Lynx_Hare)
+plot( 1:21, Lynx_Hare[,3], ylim=c(0,90),
+      xlab="year", ylab="Thousands of Pelts",
+      xaxt="n", type="l", lwd=1.5)
+at <- c(1,11,21)
+axis <- c(1, at=at, labels=Lynx_Hare$Year[at])
+lines(1:21, Lynx_Hare[,2], lwd=1.5, col=rangi2)
+points(1:21, Lynx_Hare[,3], bg="Black", col="white", pch=21, cex=1.4)
+points(1:21, Lynx_Hare[,2], bg=rangi2, col="white", pch=21, cex=1.4)
+text( 17, 80, "Lepus", pos=2)
+text(19,50, "Lynx", pos=2, col=rangi2)
+```
+
+Note, these are records of pelts, not live animals. Fluctuations appear to happen in tandum.
+
+A common way to model time series is an _autoregressive model_, where the outcome in the previous time step is a _lag variable_ and added as a predictor to the next time step, for example, hares at time $t$,
+
+$$
+  E(H_t) = \alpha + \beta_1 H_{t-1} + \beta_2 L_{t-1}
+$$
+
+Where $H_t$ is the hares at time $t$. If $\beta_1$ is less than $1$, they regress to a mean population of $\alpha$. The third term is a preadator effect, the number of lynx at the previous time period. Some even add a deeper lag, a $\beta_3 H_{t-2}$ term.
+
+Several famous problems use autoregressive models, but they're not great true models - nothing that happened 2 steps ago really matter now. These models also propagate error, the observed value at prior time step doesn't affect real life, only the true, unobserved, value. What we really need is a _state space model_. Last, there's no physical interpretation of the parameters. Sometimes these problems are fine if you're forecasting, but for anything else, they're not. And often they're even bad at forecasting.
+
+This section will also go over how to fit systems of _ordinary differential equations_ (ODEs) to data.
+
+
+
+
