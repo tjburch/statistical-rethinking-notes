@@ -1,0 +1,21 @@
+# Chapter 17 - Horoscopes
+
+Stats courses resemble horoscopes - vague to remain relevant, exaggerated importance. It's important, but only as much as the other parts, everything interacts. Also plenty of failures, as much as half of scientific literature may be untrue - reproducability crisis.
+
+How to reconcile messy history, contemporary failure with major successes? Science is a _population-level_ process, not individual hypothesis but populations.
+
+Some salient pieces of the dynamic of scientific discovery,
+
+1. Quality of theory and predictions - a good theory specifies precise predictions which motivate precise tests
+2. Dynamics of research funding - If there are no sources of long-term funding, long-term research won't be done. If those with funding choose who gets funding, corruption can sneak in
+3. Quality of measurement - Research design matters, which is often forgotten when interpreting statistical analyses. Poor signal doesn't mean no findings, it means unreliable ones.
+4. Quality of data analysis - Many common proactices can exacerbate false discovery. Must design your analysis before you see data
+5. Quality of peer review - Good peer review is vital. Much current peer review is bad
+6. Publication - Agonize over bias in analysis but let it back in during publication by incentivizing positive findings
+7. Post-publication peer review - No formal system for linking published papers to criticism, retracted papers continue to be cited
+8. Replication and meta-analysis - Most important, but disincentivized
+
+Tend to focus on statistical analysis because we have formulas and theorems, but every piece could use improvement. One aspect you do control: openness. Plan the research together with the statistical analysis, document in the form of a mock analysis, use Github, then collect the data. Provide all data and scripts to repeat analysis.
+
+**The data and its analysis are the scientific product. The paper is just an advertisement.**
+
