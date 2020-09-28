@@ -1,0 +1,75 @@
+## Chapter 5 problems
+
+```{r, include=FALSE}
+library(rethinking)
+```
+
+__8E1.__
+
+>For each of the causal relationships below, name a hypothetical third variable that would lead to an interaction effect.
+
+>(1) Bread dough rises because of yeast. 
+
+Temperature 
+
+>(2) Education leads to higher income. 
+
+Field of study
+
+>(3) Gasoline makes a car go.
+
+Car weight
+
+
+__8E2__
+>Which of the following explanations invokes an interaction?
+
+>(1) Caramelizing onions requires cooking over low heat and making sure the onions do not dry out.
+>(2) A car will go faster when it has more cylinders or when it has a better fuel injector.
+>(3) Most people acquire their political beliefs from their parents, unless they get the instead from their friends.
+>(4) Intelligent animal species tend to be either highly social or have manipulative appendages (hands, tentacles, etc.).
+
+1 - the heat will also dry the onions.
+
+__8E3.__ 
+
+>For each of the explanations in 8E2, write a linear model that expresses the stated relationship.
+
+>(1) Caramelizing onions requires cooking over low heat and making sure the onions do not dry out.
+
+$ C_i \sim \alpha + \beta_t T_i + \beta_M M_i + T_i M_i$
+
+For carmelization $C_i$, temperature $T_i$ and moisture $M_i$ of onion $i$.
+
+>(3) Most people acquire their political beliefs from their parents, unless they get the instead from their friends.
+
+$ L_i \sim \alpha + \beta_P P_i + \beta_F F_i$
+
+For political leaning $L_i$ influenced by parents with leaning $P_i$ and friends $F_i$ for individual $i$.
+
+
+__8M1.__ 
+
+>Recall the tulips example from the chapter. Suppose another set of treatments adjusted the temperature in the greenhouse over two levels: cold and hot. The data in the chapter were collected at the cold temperature. You find none of the plants grown under the hot temperature developed any blooms at all, regardless of the water and shade levels. Can you explain this result in terms of interactions between water, shade, and temperature?
+
+Temperature is the dominating factor, the effect of shade and water levels can be interpreted as dependent on it
+
+
+__8M2.__
+
+> Can you invent a regression equation that would make the bloom size zero, whenever the temperature is hot?
+
+Let $T_i$ be a boolean variable indicating hot (0) or cold (1). Then the size regression could be:
+
+$ B_i \sim T_i (\alpha + \beta_W W_i + \beta_S S_i + \beta_{WS} W_i S_i)$
+
+
+__8M3.__
+
+>In parts of North America, ravens depend upon wolves for their food. This is because ravens are carnivorous but cannot usually kill or open carcasses of prey. Wolves however can and do kill and tear open animals, and they tolerate ravens co-feeding at their kills. This species relationship is generally described as a “species interaction.” Can you invent a hypothetical set of data on raven population size in which this relationship would manifest as a statistical interaction? Do you think the biological interaction could be linear? Why or why not?
+
+$ R_i \sim \alpha + (\beta_F + \beta_W W_i) F_i$
+
+Where $F_i$ is the amount of food at time $i$, $W_i$ is the wolf population, and $R_i$ is the raven population.
+
+There's a similar problem in chapter 16 with hares and lynxes, where they have a negative interaction (lynx eat hares).
