@@ -1,0 +1,95 @@
+## Chapter 13 problems
+
+```{r, include=FALSE}
+library(rethinking)
+```
+
+__13E1.__
+
+>Which of the following priors will produce more shrinkage in the estimates? 
+
+\begin{align}
+\alpha_{tank} &\sim \text{Normal}(0, 1) \\
+\alpha_{tank} &\sim \text{Normal}(0, 2)
+\end{align}
+
+The one with the tighter spread, $\text{Normal}(0,1)$, has more shrinkage
+
+__13E2.__
+
+>Make the following model into a multilevel model.
+
+\begin{align}
+y_i &\sim \text{Binomial}(1,p_i)\\
+\text{logit}(p_i) &= \alpha_{\text{GROUP}[i]} + \beta x_i \\
+\alpha_{\text{GROUP}} &\sim \text{Normal}(0,10)\\
+\beta &\sim \text{Normal}(0,1)
+\end{align}
+
+We need to add priors for the GROUP-level intercepts:
+
+\begin{align}
+y_i &\sim \text{Binomial}(1,p_i)\\
+\text{logit}(p_i) &= \alpha_{\text{GROUP}[i]} + \beta x_i \\
+\alpha_{\text{GROUP}} &\sim \text{Normal}(\bar{\alpha},\sigma_\alpha)\\
+\beta &\sim \text{Normal}(0,1)\\
+\bar{\alpha} &\sim \text{Normal}(0,1)\\
+\sigma_\alpha &\sim \text{Exponential}(1)
+\end{align}
+
+__13E3.__
+
+>Make the following model into a multilevel model.
+
+\begin{align}
+y_i &\sim \text{Normal}(\mu_i,\sigma)\\
+\mu_i &= \alpha_{\text{GROUP}[i]} + \beta x_i \\
+\alpha_{\text{GROUP}} &\sim \text{Normal}(0,10)\\
+\beta &\sim \text{Normal}(0,1)\\
+\sigma &\sim \text{HalfCauchy}(0,2)
+\end{align}
+
+We need to add priors here for the GROUP level intercept as well:
+
+\begin{align}
+y_i &\sim \text{Normal}(\mu_i,\sigma)\\
+\mu_i &= \alpha_{\text{GROUP}[i]} + \beta x_i \\
+\alpha_{\text{GROUP}} &\sim \text{Normal}(\bar{\alpha},\sigma_\alpha)\\
+\beta &\sim \text{Normal}(0,1)\\
+\bar{\alpha} &\sim \text{Normal}(0,1)\\
+\sigma_\alpha &\sim \text{Exponential}(1)\\
+\sigma &\sim \text{HalfCauchy}(0,2)
+\end{align}
+
+
+__13E4.__
+
+>Write an example mathematical model formula for a Poisson regression with varying intercepts.
+
+\begin{align}
+y_i &\sim \text{Poisson}(\lambda_i)\\
+\log(\lambda) &= \alpha_{i} + \beta x_i \\
+\alpha_{i} &\sim \text{Normal}(\bar{\alpha},\sigma_\alpha)\\
+\beta &\sim \text{Normal}(0,1)\\
+\bar{\alpha} &\sim \text{Normal}(0,1)\\
+\sigma_\alpha &\sim \text{Exponential}(1)\\
+\end{align}
+
+__13E5.__
+
+> Write an example mathematical model formula for a Poisson regression with two different kinds of varying intercepts, a cross-classified model.
+
+Add extra intercepts to accomodate cross-classification
+
+\begin{align}
+y_i &\sim \text{Poisson}(\lambda_i)\\
+\log(\lambda) &= \alpha + \alpha_{1,i} + \alpha_{2,i} + \beta x_i \\
+\alpha &\sim \text{Normal}(0,10)\\
+\beta &\sim \text{Normal}(0,1)\\
+\alpha_{1,i} &\sim \text{Normal}(0,\sigma_{\alpha_1})\\
+\alpha_{2,i} &\sim \text{Normal}(0,\sigma_{\alpha_2})\\
+\sigma_{\alpha_1} &\sim \text{Exponential}(1)\\
+\sigma_{\alpha_2} &\sim \text{Exponential}(1)\\
+\end{align}
+
+
