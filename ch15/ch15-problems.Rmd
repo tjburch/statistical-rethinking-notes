@@ -1,0 +1,184 @@
+## Chapter 15 problems
+```{r, include=FALSE}
+library(rethinking)
+```
+
+__15E1.__
+
+>Rewrite the Oceanic tools model (from Chapter 11) below so that it assumes measured error on the log population sizes of each society. You don’t need to fit the model to data. Just modify the mathematical formula:
+
+$$
+T_i \sim \text{Poisson}(\mu_i)\\
+\log \mu_i = \alpha + \beta \log P_{true,i}\\
+P_{obs,i} \sim \text{Normal}(P_{true,i}, P_{SE,i})\\
+P_{true,i} \sim \text{Normal}(0,1)\\
+\alpha \sim \text{Normal}(0,1.5)\\
+\beta \sim \text{Normal}(0,1)\\
+P_{SE,i} \sim \text{Exponential}(1)
+$$
+
+
+__15E2.__
+>Rewrite the same model so that it allows imputation of missing values for log population. There aren’t any missing values in the variable, but you can still write down a model formula that would imply imputation, if any values were missing.
+
+$$
+T_i \sim \text{Poisson}(\mu_i)\\
+\log \mu_i = \alpha + \beta \log P_i\\
+P_i \sim \text{Normal}(\nu, \sigma_P)\\
+\nu \sim \text{Normal}(\bar{P}, \sigma_P)\\
+\sigma_P \sim \text{Exponential}(1)\\
+\alpha \sim \text{Normal}(0,1.5)\\
+\beta \sim \text{Normal}(0,1)\\
+$$
+
+__15M1.__
+
+> Using the mathematical form of the imputation model in the chapter, explain what is being assumed about how the missing values were generated.
+
+The assumptions in the chapter are that the missing data follow some specific constant distribution. The imputation techniques presented so far use the mean of the present data as a method of centralizing the imputed data, so it assumes the missing data has the same mean as the existing data.
+
+__15M2.__
+
+TODO
+
+>In earlier chapters, we threw away cases from the primate milk data, so we could use the neocortex variable. Now repeat the WAIC model comparison example from Chapter 6, but use imputation on the neocortex variable so that you can include all of the cases in the original data. The simplest form of imputation is acceptable. How are the model comparison results affected by being able to include all of the cases?
+
+```{r}
+data("milk")
+d <- milk
+str(d)
+
+```
+
+
+```{r}
+d$K <- scale( d$kcal.per.g )
+d$N <- scale( d$neocortex.perc )
+d$M <- scale( log(d$mass) )
+```
+
+
+
+```{r}
+d_complete <-list(
+  K = d$K[complete.cases()]
+)
+
+```
+```{r}
+m5.5_draft <- quap(
+    alist(
+        K ~ dnorm( mu , sigma ) ,
+        mu <- a + bN*N ,
+        N <- dnorm()
+        a ~ dnorm( 0 , 1 ) ,
+        bN ~ dnorm( 0 , 1 ) ,
+        sigma ~ dexp( 1 )
+) , data=dcc )
+
+```
+
+
+__15H1.__
+
+>The data in data(elephants) are counts of mating sobserved for bull elephants of differing ages. There is a strong positive relationship between age and matings. However, age is not always assessed accurately. First, fit a Poisson model predicting MATINGS with AGE as a predictor. Second, assume that the observed AGE values are uncertain and have a standard error of ±5 years. Re-estimate the relationship between MATINGS and AGE, incorporating this measurement error. Compare the inferences of the two models.
+
+```{r}
+data("elephants")
+dat <-elephants
+head(dat)
+```
+
+Fit a Poisson model predicting Matings with Age as a predictor:
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+m15h1_1 <- ulam(
+  alist(
+    MATINGS ~ dpois( lambda ),
+    log(lambda) <- alpha + bA * AGE,
+    alpha ~ dnorm(0,1),
+    bA ~ dnorm(0,1)
+  ), data=dat, chains=2, cores=2, cmdstan=TRUE
+)
+```
+
+```{r}
+precis(m15h1_1)
+```
+
+Next add the error of $\pm 5$ years.
+
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+dlist <-list(
+  A_obs = dat$AGE,
+  A_sd = rep_len(5, length.out=length(dat$AGE)),
+  M = dat$MATINGS,
+  N = nrow(dat)
+)
+m15h1_1e <- ulam(
+  alist(
+    M ~ dpois( lambda ),
+    log(lambda) <- alpha + bA * A_true[i],
+    A_obs ~ dnorm(A_true, A_sd),
+    vector[N]:A_true ~ dnorm(0,10),
+    alpha ~ dnorm(0,1),
+    bA ~ dnorm(0,1)
+  ), data=dlist, chains=2, cores=2,cmdstan=TRUE
+)
+```
+
+```{r}
+precis(m15h1_1e)
+```
+
+Value for $\beta_{\text{AGE}}$ is pretty similar, intercept is a bit smaller.
+
+```{r}
+plot(dat$AGE, dat$MATINGS, xlab='age', ylab='mating', pch=16, col='cornflowerblue')
+```
+```{r}
+m2_posterior$
+```
+
+```{r}
+# sample each model
+m1_sample <- sim(m15h1_1)
+m1_mating_means <- apply(m1_sample, 2, mean)
+m1_posterior <- extract.samples(m15h1_1)
+#m1_predicted_age <- apply(m1_posterior$AGE, 2 ,mean)
+
+m2_sample <- sim(m15h1_1e)
+m2_mating_means <- apply(m2_sample, 2, mean)
+m2_posterior <- extract.samples(m15h1_1e)
+m2_predicted_age <- apply(m2_posterior$A_true, 2 ,mean)
+
+
+# Plot True Values
+plot(dat$AGE, dat$MATINGS, xlab='age', ylab='mating', pch=16, col='cornflowerblue')
+#points(m2_predicted_age, m2_mating_means, col="red",pch=1)
+
+
+#
+#points(age_estimated, matings_est)
+
+legend("topleft", inset=0.03, legend=c("True"), col=c("cornflowerblue"),cex=0.8, pch=c(16) ,box.lty = 1)
+```
+
+__5H4.__
+
+>Some lad named Andrew made an eight-sided spinner. He wanted to know if it is fair. So he spun it a bunch of times, recording the counts of each value. Then he accidentally spilled coffee over the 4s and 5s. The surviving data are summarized below.
+
+
+| value     | 1  | 2  | 3  | 4 | 5 | 6  | 7  | 8  |
+|-----------|----|----|----|---|---|----|----|----|
+| Frequency | 18 | 19 | 22 | ? | ? | 19 | 20 | 22 |
+
+>Your job is to impute the two missing values in the table above. Andrew doesn’t remember how many times he spun the spinner. So you will have to assign a prior distribution for the total number of spins and then marginalize over the unknown total. Andrew is not sure the spinner is fair (every value is equally likely), but he’s confident that none of the values is twice as likely as any other. Use a Dirichlet distribution to capture this prior belief. Plot the joint posterior distribution of 4s and 5s.
+
+First generate data
+
+```{r}
+value <- c(1,2,3,4,5,6,7,8)
+frequency <- c(18,19,22,NA,NA,19,20,22)
+```
