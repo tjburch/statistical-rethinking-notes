@@ -1,6 +1,7 @@
 # Chapter 14 - Adventures in Covariance
 ```{r, include=FALSE}
 library(rethinking)
+library(cmdstanr)
 ```
 
 Revisit robot example from last chapter - cafes can vary in their average wait time, but also in the differences of wait between morning and afternoon, model looks like:
@@ -144,7 +145,26 @@ dens( R[,1,2])
 
 Compared $\eta=1$ (flat) to $\eta=3$.
 
-Now we'll fit the model - Stan code:
+Now we'll fit the model - 
+
+```{r}
+set.seed(867530)
+m14.1 <- ulam(
+    alist(
+        wait ~ normal( mu , sigma ),
+        mu <- a_cafe[cafe] + b_cafe[cafe]*afternoon,
+        c(a_cafe,b_cafe)[cafe] ~ multi_normal( c(a,b) , Rho , sigma_cafe ),
+        a ~ normal(5,2),
+        b ~ normal(-1,0.5),
+        sigma_cafe ~ exponential(1),
+        sigma ~ exponential(1),
+        Rho ~ lkj_corr(2)
+    ) , data=d , chains=2 , cores=2 ,cmdstan=FALSE )
+```
+
+
+Stan code:
+
 
 ```
 try01 <- as.character("
