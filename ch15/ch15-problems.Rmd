@@ -43,13 +43,20 @@ TODO
 
 >In earlier chapters, we threw away cases from the primate milk data, so we could use the neocortex variable. Now repeat the WAIC model comparison example from Chapter 6, but use imputation on the neocortex variable so that you can include all of the cases in the original data. The simplest form of imputation is acceptable. How are the model comparison results affected by being able to include all of the cases?
 
+Load the data
+
 ```{r}
 data("milk")
 d <- milk
-str(d)
-
+d$neocortex.prop <- d$neocortex.perc / 100
+d$logmass <- log(d$mass)
+dat_list <- list(
+    K = standardize( d$kcal.per.g ),
+    B = standardize( d$neocortex.prop ),
+    M = standardize( d$logmass ) )
 ```
 
+Create datasets
 
 ```{r}
 d$K <- scale( d$kcal.per.g )
@@ -58,25 +65,49 @@ d$M <- scale( log(d$mass) )
 ```
 
 
+Make the complete case for benchmarking
 
 ```{r}
-d_complete <-list(
-  K = d$K[complete.cases()]
-)
-
+d_complete <- d[ complete.cases(d$K, d$N, d$M), ]
 ```
+
+Make models. First start with the original model
+
 ```{r}
-m5.5_draft <- quap(
+m5.7 <- quap(
     alist(
         K ~ dnorm( mu , sigma ) ,
-        mu <- a + bN*N ,
-        N <- dnorm()
-        a ~ dnorm( 0 , 1 ) ,
-        bN ~ dnorm( 0 , 1 ) ,
+        mu <- a + bN*N + bM*M ,
+        a ~ dnorm( 0 , 0.2 ) ,
+        bN ~ dnorm( 0 , 0.5 ) ,
+        bM ~ dnorm( 0 , 0.5 ) ,
         sigma ~ dexp( 1 )
-) , data=dcc )
+    ) , data=d_complete )
+precis(m5.7)
+```  
 
+
+```{r}
+m15.3 <- ulam(
+    alist(
+        K ~ dnorm( mu , sigma ),
+        mu <- a + bB*B + bM*M,
+        B ~ dnorm( nu , sigma_B ),
+        c(a,nu) ~ dnorm( 0 , 0.5 ),
+        c(bB,bM) ~ dnorm( 0, 0.5 ),
+        sigma_B ~ dexp( 1 ),
+        sigma ~ dexp( 1 )
+    ) , data=dat_list , chains=4 , cores=4 ,log_lik=TRUE)
+precis(m15.3, depth=2)
 ```
+
+```{r}
+compare( m15.3 , m5.7 , func=WAIC )
+```
+
+WAIC appears to actually be worse for the imputed model.
+
+
 
 
 __15H1.__
